@@ -1,0 +1,22 @@
+spring:
+  application:
+    name: ai-code-platform
+  profiles:
+    active: dev
+
+server:
+  port: 8082
+  servlet:
+    context-path: /api
+
+# springdoc-openapi
+springdoc:
+  group-configs:
+    - group: 'default'
+      packages-to-scan: com.ai.codeplatform.controller
+# knife4j
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+
