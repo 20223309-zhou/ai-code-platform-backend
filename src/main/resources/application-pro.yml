@@ -13,3 +13,23 @@ spring:
       port: 6379
       password: 123456
       timeout: 5000
+# AI
+langchain4j:
+  open-ai:
+    chat-model:
+      # 严格确保结构化输出生效
+      strict-json-schema: true
+      response-format: json_object
+      max-tokens: 8192
+      base-url: ${AI_BASE_URL}
+      api-key: ${AI_API_KEY}
+      model-name: ${AI_MODEL_NAME}
+      log-requests: true
+      log-responses: true
+    streaming-chat-model:
+      max-tokens: 8192
+      base-url: ${AI_BASE_URL}
+      api-key: ${AI_API_KEY}
+      model-name: ${AI_MODEL_NAME}
+      log-requests: true
+      log-responses: true
