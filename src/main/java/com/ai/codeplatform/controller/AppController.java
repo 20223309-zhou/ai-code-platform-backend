@@ -2,6 +2,7 @@ package com.ai.codeplatform.controller;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
 import com.ai.codeplatform.annotation.AuthCheck;
 import com.ai.codeplatform.common.BaseResponse;
 import com.ai.codeplatform.common.DeleteRequest;
@@ -10,34 +11,26 @@ import com.ai.codeplatform.constant.AppConstant;
 import com.ai.codeplatform.constant.UserConstant;
 import com.ai.codeplatform.exception.BusinessException;
 import com.ai.codeplatform.exception.ErrorCode;
-import com.ai.codeplatform.model.dto.app.AppAddRequest;
-import com.ai.codeplatform.model.dto.app.AppAdminUpdateRequest;
-import com.ai.codeplatform.model.dto.app.AppQueryRequest;
-import com.ai.codeplatform.model.dto.app.AppUpdateRequest;
+import com.ai.codeplatform.model.dto.app.*;
 import com.ai.codeplatform.model.entity.User;
 import com.ai.codeplatform.model.enums.CodeGenTypeEnum;
 import com.ai.codeplatform.model.vo.AppVO;
 import com.ai.codeplatform.service.UserService;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
-import dev.langchain4j.agent.tool.P;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
+import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.web.bind.annotation.*;
 import com.ai.codeplatform.model.entity.App;
 import com.ai.codeplatform.service.AppService;
-import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
-import javax.imageio.metadata.IIOMetadataFormat;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 应用 控制层。
@@ -62,12 +55,12 @@ public class AppController {
      */
     @PostMapping("/add")
     public BaseResponse<Long> addApp(@RequestBody AppAddRequest appAddRequest, HttpServletRequest request) {
-        if (appAddRequest == null){
+        if (appAddRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         // 参数校验
         String initPrompt = appAddRequest.getInitPrompt();
-        if (StrUtil.isBlank(initPrompt)){
+        if (StrUtil.isBlank(initPrompt)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "初始化 prompt 不能为空");
         }
         // 获取当前登录用户
@@ -82,7 +75,7 @@ public class AppController {
         app.setCodeGenType(CodeGenTypeEnum.MULTI_FILE.getValue());
         // 插入数据库
         boolean result = appService.save(app);
-        if (!result){
+        if (!result) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR);
         }
         return ResultUtils.success(app.getId());
@@ -104,7 +97,7 @@ public class AppController {
         long id = appUpdateRequest.getId();
         // 判断是否存在
         App oldApp = appService.getById(id);
-        if (oldApp == null){
+        if (oldApp == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
         }
         // 仅本人可更新
@@ -117,7 +110,7 @@ public class AppController {
         // 设置编辑时间
         app.setEditTime(LocalDateTime.now());
         boolean result = appService.updateById(app);
-        if (!result){
+        if (!result) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR);
         }
         return ResultUtils.success(true);
@@ -139,7 +132,7 @@ public class AppController {
         long id = deleteRequest.getId();
         // 判断是否存在
         App oldApp = appService.getById(id);
-        if (oldApp == null){
+        if (oldApp == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
         }
         // 仅本人或管理员可删除
@@ -152,17 +145,18 @@ public class AppController {
 
     /**
      * 根据 id 获取应用详情
-     * @param id      应用 id
+     *
+     * @param id 应用 id
      * @return 应用详情
      */
     @GetMapping("/get/vo")
     public BaseResponse<AppVO> getAppVOById(long id) {
-        if (id <= 0){
+        if (id <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         // 查询数据库
         App app = appService.getById(id);
-        if (app == null){
+        if (app == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
         }
         // 获取封装类（包含用户信息）
@@ -178,13 +172,13 @@ public class AppController {
      */
     @PostMapping("/my/list/page/vo")
     public BaseResponse<Page<AppVO>> listMyAppVOByPage(@RequestBody AppQueryRequest appQueryRequest, HttpServletRequest request) {
-        if (appQueryRequest == null){
+        if (appQueryRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         User loginUser = userService.getLoginUser(request);
         // 限制每页最多 20 个
         long pageSize = appQueryRequest.getPageSize();
-        if (pageSize > 20){
+        if (pageSize > 20) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         long pageNum = appQueryRequest.getPageNum();
@@ -207,12 +201,12 @@ public class AppController {
      */
     @PostMapping("/good/list/page/vo")
     public BaseResponse<Page<AppVO>> listGoodAppVOByPage(@RequestBody AppQueryRequest appQueryRequest) {
-        if (appQueryRequest == null){
+        if (appQueryRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         // 限制每页最多 20 个
         long pageSize = appQueryRequest.getPageSize();
-        if (pageSize > 20){
+        if (pageSize > 20) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "每页最多查询 20 个应用");
         }
         long pageNum = appQueryRequest.getPageNum();
@@ -243,7 +237,7 @@ public class AppController {
         long id = deleteRequest.getId();
         // 判断是否存在
         App oldApp = appService.getById(id);
-        if (oldApp == null){
+        if (oldApp == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
         }
         boolean result = appService.removeById(id);
@@ -265,7 +259,7 @@ public class AppController {
         long id = appAdminUpdateRequest.getId();
         // 判断是否存在
         App oldApp = appService.getById(id);
-        if (oldApp == null){
+        if (oldApp == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
         }
         App app = new App();
@@ -273,7 +267,7 @@ public class AppController {
         // 设置编辑时间
         app.setEditTime(LocalDateTime.now());
         boolean result = appService.updateById(app);
-        if (!result){
+        if (!result) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR);
         }
         return ResultUtils.success(true);
@@ -288,7 +282,7 @@ public class AppController {
     @PostMapping("/admin/list/page/vo")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public BaseResponse<Page<AppVO>> listAppVOByPageByAdmin(@RequestBody AppQueryRequest appQueryRequest) {
-        if (appQueryRequest == null){
+        if (appQueryRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         long pageNum = appQueryRequest.getPageNum();
@@ -311,16 +305,81 @@ public class AppController {
     @GetMapping("/admin/get/vo")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public BaseResponse<AppVO> getAppVOByIdByAdmin(long id) {
-        if (id <= 0){
+        if (id <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         // 查询数据库
         App app = appService.getById(id);
-        if (app == null){
+        if (app == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
         }
         // 获取封装类
         return ResultUtils.success(appService.getAppVO(app));
     }
+
+    /**
+     * 聊天生成代码
+     * @param appId 应用ID
+     * @param message 用户消息
+     * @param request 请求
+     * @return 生成的代码
+     */
+    @GetMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<String>> chatToGenCode(@RequestParam Long appId,
+                                                       @RequestParam String message,
+                                                       HttpServletRequest request) {
+        // 参数校验
+        if (appId == null || appId <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "应用ID无效");
+        }
+        if (StrUtil.isBlank(message)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户消息不能为空");
+        }
+        // 获取当前登录用户
+        User loginUser = userService.getLoginUser(request);
+        // 调用服务生成代码（流式）
+        Flux<String> contentFlux = appService.chatToGenCode(appId, message, loginUser);
+        // 转换为 ServerSentEvent 格式
+        return contentFlux
+                .map(chunk -> {
+                    // 将内容包装成JSON对象
+                    Map<String, String> wrapper = Map.of("d", chunk);
+                    String jsonData = JSONUtil.toJsonStr(wrapper);
+                    return ServerSentEvent.<String>builder()
+                            .data(jsonData)
+                            .build();
+                })
+                .concatWith(Mono.just(
+                        // 发送结束事件
+                        ServerSentEvent.<String>builder()
+                                .event("done")
+                                .data("")
+                                .build()
+                ));
+    }
+
+    /**
+     * 应用部署
+     *
+     * @param appDeployRequest 部署请求
+     * @param request          请求
+     * @return 部署 URL
+     */
+    @PostMapping("/deploy")
+    public BaseResponse<String> deployApp(@RequestBody AppDeployRequest appDeployRequest, HttpServletRequest request) {
+        if (appDeployRequest == null){
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        Long appId = appDeployRequest.getAppId();
+        if (appId == null || appId <= 0){
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
+        }
+        // 获取当前登录用户
+        User loginUser = userService.getLoginUser(request);
+        // 调用服务部署应用
+        String deployUrl = appService.deployApp(appId, loginUser);
+        return ResultUtils.success(deployUrl);
+    }
+
 
 }
