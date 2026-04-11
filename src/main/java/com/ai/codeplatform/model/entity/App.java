@@ -9,10 +9,8 @@ import java.time.LocalDateTime;
 
 import java.io.Serial;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import com.mybatisflex.core.keygen.KeyGenerators;
+import lombok.*;
 
 /**
  * 应用 实体类。
@@ -32,7 +30,7 @@ public class App implements Serializable {
     /**
      * id
      */
-    @Id(keyType = KeyType.Auto)
+    @Id(keyType = KeyType.Generator,value = KeyGenerators.snowFlakeId)
     private Long id;
 
     /**
