@@ -7,6 +7,7 @@ import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import com.ai.codeplatform.constant.AppConstant;
 import com.ai.codeplatform.core.AiCodeGeneratorFacade;
+import com.ai.codeplatform.core.handler.StreamHandlerExecutor;
 import com.ai.codeplatform.exception.BusinessException;
 import com.ai.codeplatform.exception.ErrorCode;
 import com.ai.codeplatform.model.dto.app.AppQueryRequest;
@@ -43,7 +44,7 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
-public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppService{
+public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppService {
     @Resource
     private UserService userService;
 
@@ -52,8 +53,13 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
 
     @Resource
     private ChatHistoryService chatHistoryService;
+
+    @Resource
+    private StreamHandlerExecutor streamHandlerExecutor;
+
     /**
      * 获取应用视图对象,并封装用户脱敏信息
+     *
      * @param app
      * @return
      */
@@ -76,6 +82,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
 
     /**
      * 获取查询条件
+     *
      * @param appQueryRequest
      * @return
      */
@@ -108,6 +115,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
 
     /**
      * 获取应用视图对象列表
+     *
      * @param appList
      * @return
      */
@@ -132,6 +140,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
 
     /**
      * 聊天生成代码
+     *
      * @param appId
      * @param message
      * @param loginUser
@@ -140,15 +149,15 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
     @Override
     public Flux<String> chatToGenCode(Long appId, String message, User loginUser) {
         // 1. 参数校验
-        if (appId == null || appId <= 0){
+        if (appId == null || appId <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
         }
-        if (StrUtil.isBlank( message)){
+        if (StrUtil.isBlank(message)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户消息不能为空");
         }
         // 2. 查询应用信息
         App app = this.getById(appId);
-        if (app == null){
+        if (app == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "应用不存在");
         }
         // 3. 验证用户是否有权限访问该应用，仅本人可以生成代码
@@ -164,31 +173,15 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
         // 5. 通过校验后，添加用户消息到对话历史
         chatHistoryService.addChatMessage(appId, message, ChatHistoryMessageTypeEnum.USER.getValue(), loginUser.getId());
         // 6. 调用 AI 生成代码（流式）
-        Flux<String> contentFlux = aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, appId);
-        // 7. 收集AI响应内容并在完成后记录到对话历史
-        StringBuilder aiResponseBuilder = new StringBuilder();
-        return contentFlux
-                .map(chunk -> {
-                    // 收集AI响应内容
-                    aiResponseBuilder.append(chunk);
-                    return chunk;
-                })
-                .doOnComplete(() -> {
-                    // 流式响应完成后，添加AI消息到对话历史
-                    String aiResponse = aiResponseBuilder.toString();
-                    if (StrUtil.isNotBlank(aiResponse)) {
-                        chatHistoryService.addChatMessage(appId, aiResponse, ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
-                    }
-                })
-                .doOnError(error -> {
-                    // 如果AI回复失败，也要记录错误消息
-                    String errorMessage = "AI回复失败: " + error.getMessage();
-                    chatHistoryService.addChatMessage(appId, errorMessage, ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
-                });
+        Flux<String> codeStream = aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, appId);
+        // 7. 收集 AI 响应内容并在完成后记录到对话历史
+        return streamHandlerExecutor.doExecute(codeStream, chatHistoryService, appId, loginUser, codeGenTypeEnum);
+
     }
 
     /**
      * 应用部署
+     *
      * @param appId
      * @param loginUser
      * @return
@@ -196,15 +189,15 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
     @Override
     public String deployApp(Long appId, User loginUser) {
         // 1. 参数校验
-        if (appId == null || appId <= 0){
+        if (appId == null || appId <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
         }
-        if (loginUser == null){
+        if (loginUser == null) {
             throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR, "用户未登录");
         }
         // 2. 查询应用信息
         App app = this.getById(appId);
-        if (app == null){
+        if (app == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "应用不存在");
         }
         // 3. 验证用户是否有权限部署该应用，仅本人可以部署
@@ -239,7 +232,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
         updateApp.setDeployKey(deployKey);
         updateApp.setDeployedTime(LocalDateTime.now());
         boolean updateResult = this.updateById(updateApp);
-        if (!updateResult){
+        if (!updateResult) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "更新应用部署信息失败");
         }
         // 9. 返回可访问的 URL

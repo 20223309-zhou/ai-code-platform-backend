@@ -3,11 +3,19 @@ spring:
     name: ai-code-platform
   profiles:
     active: dev
+  #session 30 天过期
+  session:
+    store-type: redis
+    timeout: 2592000
 
 server:
   port: 8082
   servlet:
     context-path: /api
+    #cookie 30 天过期
+    session:
+      cookie:
+        max-age: 2592000
 
 # springdoc-openapi
 springdoc:
