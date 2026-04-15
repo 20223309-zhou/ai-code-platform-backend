@@ -20,8 +20,8 @@ langchain4j:
   open-ai:
     chat-model:
       # 严格确保结构化输出生效
-      strict-json-schema: true
-      response-format: json_object
+#      strict-json-schema: true
+#      response-format: json_object
       max-tokens: 8192
       base-url: ${AI_BASE_URL}
       api-key: ${AI_API_KEY}
@@ -35,3 +35,11 @@ langchain4j:
       model-name: ${AI_MODEL_NAME}
       log-requests: true
       log-responses: true
+
+cos:
+  client:
+    host: ${COS_HOST}
+    secretId: ${COS_SECRET_ID}
+    secretKey: ${COS_SECRET_KEY}
+    region: ${COS_REGION}
+    bucket: ${COS_BUCKET}

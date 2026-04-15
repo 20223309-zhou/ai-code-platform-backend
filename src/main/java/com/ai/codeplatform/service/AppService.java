@@ -1,11 +1,13 @@
 package com.ai.codeplatform.service;
 
+import com.ai.codeplatform.model.dto.app.AppAddRequest;
 import com.ai.codeplatform.model.dto.app.AppQueryRequest;
 import com.ai.codeplatform.model.entity.User;
 import com.ai.codeplatform.model.vo.AppVO;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.core.service.IService;
 import com.ai.codeplatform.model.entity.App;
+import jakarta.servlet.http.HttpServletRequest;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
@@ -16,6 +18,15 @@ import java.util.List;
  * @author Administrator
  */
 public interface AppService extends IService<App> {
+    /**
+     * 创建应用
+     * @param appAddRequest 创建应用请求
+     * @param request 请求
+     * @param initPrompt 初始提示
+     * @return 应用id
+     */
+    App createApp(AppAddRequest appAddRequest, HttpServletRequest request, String initPrompt);
+
     /**
      * 获取应用视图对象
      * @param app 应用
@@ -53,4 +64,11 @@ public interface AppService extends IService<App> {
      * @return 部署结果
      */
     String deployApp(Long appId, User loginUser);
+
+    /**
+     * 异步生成应用截图
+     * @param appId 应用id
+     * @param appUrl 应用url
+     */
+    void generateAppScreenshotAsync(Long appId, String appUrl);
 }
