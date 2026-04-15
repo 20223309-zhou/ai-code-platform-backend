@@ -1,6 +1,7 @@
 package com.ai.codeplatform.ai;
 
 import com.ai.codeplatform.ai.tools.FileWriteTool;
+import com.ai.codeplatform.ai.tools.ToolManager;
 import com.ai.codeplatform.exception.BusinessException;
 import com.ai.codeplatform.exception.ErrorCode;
 import com.ai.codeplatform.model.enums.CodeGenTypeEnum;
@@ -38,6 +39,8 @@ public class AiCodeGeneratorServiceFactory {
     @Resource
     private ChatHistoryService chatHistoryService;
 
+    @Resource
+    private ToolManager toolManager;
     /**
      * AI 服务实例缓存
      */
@@ -86,7 +89,7 @@ public class AiCodeGeneratorServiceFactory {
                     .streamingChatModel(reasoningStreamingChatModel)
                     .chatMemoryProvider(memoryId -> chatMemory)
                     // 添加工具
-                    .tools(new FileWriteTool())
+                    .tools(toolManager.getAllTools())
                     // 幻觉配置策略，当模型无法调用工具时，返回错误信息
                     .hallucinatedToolNameStrategy(toolExecutionRequest -> ToolExecutionResultMessage.from(
                             toolExecutionRequest, "Error: there is no tool called " + toolExecutionRequest.name()
