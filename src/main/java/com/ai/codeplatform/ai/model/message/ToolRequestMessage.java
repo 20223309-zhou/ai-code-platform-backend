@@ -1,5 +1,7 @@
 package com.ai.codeplatform.ai.model.message;
 
+import com.ai.codeplatform.ai.model.message.StreamMessage;
+import com.ai.codeplatform.ai.model.message.StreamMessageTypeEnum;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -18,6 +20,8 @@ public class ToolRequestMessage extends StreamMessage {
     private String name;
 
     private String arguments;
+
+    private String text;
 
     public ToolRequestMessage(ToolExecutionRequest toolExecutionRequest) {
         super(StreamMessageTypeEnum.TOOL_REQUEST.getValue());

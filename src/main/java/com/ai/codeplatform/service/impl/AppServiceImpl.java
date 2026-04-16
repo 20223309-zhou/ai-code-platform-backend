@@ -19,14 +19,11 @@ import com.ai.codeplatform.model.enums.ChatHistoryMessageTypeEnum;
 import com.ai.codeplatform.model.enums.CodeGenTypeEnum;
 import com.ai.codeplatform.model.vo.AppVO;
 import com.ai.codeplatform.model.vo.UserVO;
-import com.ai.codeplatform.service.ChatHistoryService;
-import com.ai.codeplatform.service.ScreenshotService;
-import com.ai.codeplatform.service.UserService;
+import com.ai.codeplatform.service.*;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import com.ai.codeplatform.model.entity.App;
 import com.ai.codeplatform.mapper.AppMapper;
-import com.ai.codeplatform.service.AppService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -70,6 +67,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
     @Resource
     private AiCodeGenTypeRoutingService aiCodeGenTypeRoutingService;
+
+    @Resource
+    private ChatHistoryOriginalService chatHistoryOriginalService;
     /**
      * 创建应用
      *
@@ -218,10 +218,11 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         }
         // 5. 通过校验后，添加用户消息到对话历史
         chatHistoryService.addChatMessage(appId, message, ChatHistoryMessageTypeEnum.USER.getValue(), loginUser.getId());
+        chatHistoryOriginalService.addOriginalChatMessage(appId, message, ChatHistoryMessageTypeEnum.USER.getValue(), loginUser.getId());
         // 6. 调用 AI 生成代码（流式）
         Flux<String> codeStream = aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, appId);
         // 7. 收集 AI 响应内容并在完成后记录到对话历史
-        return streamHandlerExecutor.doExecute(codeStream, chatHistoryService, appId, loginUser, codeGenTypeEnum);
+        return streamHandlerExecutor.doExecute(codeStream, chatHistoryService,chatHistoryOriginalService,appId, loginUser, codeGenTypeEnum);
 
     }
 
@@ -348,6 +349,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         // 先删除关联的对话历史
         try {
             chatHistoryService.deleteByAppId(appId);
+            chatHistoryOriginalService.deleteByAppId(appId);
         } catch (Exception e) {
             // 记录日志但不阻止应用删除
             log.error("删除应用关联对话历史失败: {}", e.getMessage());

@@ -2,6 +2,7 @@ package com.ai.codeplatform.core.handler;
 
 import com.ai.codeplatform.model.entity.User;
 import com.ai.codeplatform.model.enums.CodeGenTypeEnum;
+import com.ai.codeplatform.service.ChatHistoryOriginalService;
 import com.ai.codeplatform.service.ChatHistoryService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -33,10 +34,11 @@ public class StreamHandlerExecutor {
      */
     public Flux<String> doExecute(Flux<String> originFlux,
                                   ChatHistoryService chatHistoryService,
+                                  ChatHistoryOriginalService chatHistoryOriginalService,
                                   long appId, User loginUser, CodeGenTypeEnum codeGenType) {
         return switch (codeGenType) {
             case VUE_PROJECT -> // 使用注入的组件实例
-                    jsonMessageStreamHandler.handle(originFlux, chatHistoryService, appId, loginUser);
+                    jsonMessageStreamHandler.handle(originFlux, chatHistoryService, chatHistoryOriginalService,appId, loginUser);
             case HTML, MULTI_FILE -> // 简单文本处理器不需要依赖注入
                     new SimpleTextStreamHandler().handle(originFlux, chatHistoryService, appId, loginUser);
         };
