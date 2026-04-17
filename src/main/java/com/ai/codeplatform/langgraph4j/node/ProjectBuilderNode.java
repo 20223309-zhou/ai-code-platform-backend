@@ -3,7 +3,7 @@ package com.ai.codeplatform.langgraph4j.node;
 import com.ai.codeplatform.core.builder.VueProjectBuilder;
 import com.ai.codeplatform.exception.BusinessException;
 import com.ai.codeplatform.exception.ErrorCode;
-import com.ai.codeplatform.langgraph4j.SpringContextUtil;
+import com.ai.codeplatform.utils.SpringContextUtil;
 import com.ai.codeplatform.langgraph4j.state.WorkflowContext;
 import com.ai.codeplatform.model.enums.CodeGenTypeEnum;
 import lombok.extern.slf4j.Slf4j;

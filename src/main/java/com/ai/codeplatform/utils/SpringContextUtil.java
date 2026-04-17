@@ -1,4 +1,4 @@
-package com.ai.codeplatform.langgraph4j;
+package com.ai.codeplatform.utils;
 
 import org.springframework.beans.BeansException;
 import org.springframework.context.ApplicationContext;

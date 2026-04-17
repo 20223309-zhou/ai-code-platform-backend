@@ -18,6 +18,23 @@ spring:
 # AI
 langchain4j:
   open-ai:
+    # 推理 AI 模型配置（用于复杂的推理任务）
+    reasoning-streaming-chat-model:
+      base-url: ${AI_BASE_URL}
+      api-key: ${AI_API_KEY}
+      model-name: ${AI_MODEL_NAME}
+      max-tokens: 32768
+      temperature: 0.1
+      log-requests: true
+      log-responses: true
+    # 智能路由 AI 模型配置（用于简单的分类任务）
+    routing-chat-model:
+      base-url: ${ROUTING_AI_BASE_URL}
+      api-key: ${ROUTING_AI_API_KEY}
+      model-name: ${ROUTING_AI_MODEL_NAME}
+      max-tokens: 100
+      log-requests: true
+      log-responses: true
     chat-model:
       # 严格确保结构化输出生效
 #      strict-json-schema: true

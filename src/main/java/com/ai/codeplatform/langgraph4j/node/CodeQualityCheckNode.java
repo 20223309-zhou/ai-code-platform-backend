@@ -2,7 +2,7 @@ package com.ai.codeplatform.langgraph4j.node;
 
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
-import com.ai.codeplatform.langgraph4j.SpringContextUtil;
+import com.ai.codeplatform.utils.SpringContextUtil;
 import com.ai.codeplatform.langgraph4j.ai.CodeQualityCheckService;
 import com.ai.codeplatform.langgraph4j.model.QualityResult;
 import com.ai.codeplatform.langgraph4j.state.WorkflowContext;

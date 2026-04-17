@@ -2,7 +2,7 @@ package com.ai.codeplatform.langgraph4j.node;
 
 import com.ai.codeplatform.constant.AppConstant;
 import com.ai.codeplatform.core.AiCodeGeneratorFacade;
-import com.ai.codeplatform.langgraph4j.SpringContextUtil;
+import com.ai.codeplatform.utils.SpringContextUtil;
 import com.ai.codeplatform.langgraph4j.model.QualityResult;
 import com.ai.codeplatform.langgraph4j.state.WorkflowContext;
 import com.ai.codeplatform.model.enums.CodeGenTypeEnum;

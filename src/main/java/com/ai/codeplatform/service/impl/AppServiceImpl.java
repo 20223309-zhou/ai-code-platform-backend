@@ -6,6 +6,7 @@ import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import com.ai.codeplatform.ai.AiCodeGenTypeRoutingService;
+import com.ai.codeplatform.ai.AiCodeGenTypeRoutingServiceFactory;
 import com.ai.codeplatform.constant.AppConstant;
 import com.ai.codeplatform.core.AiCodeGeneratorFacade;
 import com.ai.codeplatform.core.builder.VueProjectBuilder;
@@ -66,7 +67,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     private ScreenshotService screenshotService;
 
     @Resource
-    private AiCodeGenTypeRoutingService aiCodeGenTypeRoutingService;
+    private AiCodeGenTypeRoutingServiceFactory aiCodeGenTypeRoutingServiceFactory;
 
     @Resource
     private ChatHistoryOriginalService chatHistoryOriginalService;
@@ -88,18 +89,19 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         app.setUserId(loginUser.getId());
         // 应用名称暂时为 initPrompt 前 12 位
         app.setAppName(initPrompt.substring(0, Math.min(initPrompt.length(), 12)));
-        // 根据initPrompt 让AI智能选择代码生成类型
-        CodeGenTypeEnum codeGenTypeEnum = aiCodeGenTypeRoutingService.routeCodeGenType(initPrompt);
-        if (codeGenTypeEnum == null){
-            codeGenTypeEnum = CodeGenTypeEnum.MULTI_FILE;
+        // ai智能选择代码生成类型
+        AiCodeGenTypeRoutingService routingService = aiCodeGenTypeRoutingServiceFactory.createAiCodeGenTypeRoutingService();
+        CodeGenTypeEnum selectedCodeGenType = routingService.routeCodeGenType(initPrompt);
+        if (selectedCodeGenType == null){
+            selectedCodeGenType = CodeGenTypeEnum.MULTI_FILE;
         }
-        app.setCodeGenType(codeGenTypeEnum.getValue());
+        app.setCodeGenType(selectedCodeGenType.getValue());
         // 插入数据库
         boolean result = save(app);
         if (!result) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR);
         }
-        log.info("应用创建成功，ID: {}, 类型: {}", app.getId(), codeGenTypeEnum.getValue());
+        log.info("应用创建成功，ID: {}, 类型: {}", app.getId(), selectedCodeGenType.getValue());
         return app;
     }
 
