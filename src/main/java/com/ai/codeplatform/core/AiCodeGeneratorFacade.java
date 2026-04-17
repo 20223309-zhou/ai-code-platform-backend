@@ -8,6 +8,8 @@ import com.ai.codeplatform.ai.model.MultiFileCodeResult;
 import com.ai.codeplatform.ai.model.message.AiResponseMessage;
 import com.ai.codeplatform.ai.model.message.ToolExecutedMessage;
 import com.ai.codeplatform.ai.model.message.ToolRequestMessage;
+import com.ai.codeplatform.constant.AppConstant;
+import com.ai.codeplatform.core.builder.VueProjectBuilder;
 import com.ai.codeplatform.core.parser.CodeParserExecutor;
 import com.ai.codeplatform.core.saver.CodeFileSaverExecutor;
 import com.ai.codeplatform.exception.BusinessException;
@@ -33,6 +35,8 @@ public class AiCodeGeneratorFacade {
     @Resource
     private AiCodeGeneratorServiceFactory aiCodeGeneratorServiceFactory;
 
+    @Resource
+    private VueProjectBuilder vueProjectBuilder;
     /**
      * 统一入口：根据类型生成并保存代码（使用 appId）
      *
@@ -86,7 +90,7 @@ public class AiCodeGeneratorFacade {
             }
             case VUE_PROJECT -> {
                 TokenStream codeStream = aiCodeGeneratorService.generateVueProjectCodeStream(appId, userMessage);
-                yield processTokenStream(codeStream);
+                yield processTokenStream(codeStream, appId);
             }
             default -> {
                 String errorMessage = "不支持的生成类型：" + codeGenTypeEnum.getValue();
@@ -100,7 +104,7 @@ public class AiCodeGeneratorFacade {
      * @param tokenStream TokenStream 对象
      * @return Flux<String> 流式响应
      */
-    private Flux<String> processTokenStream(TokenStream tokenStream) {
+    private Flux<String> processTokenStream(TokenStream tokenStream, Long appId) {
         return Flux.create(sink -> {
             tokenStream.onPartialResponse((String partialResponse) -> {
                         AiResponseMessage aiResponseMessage = new AiResponseMessage(partialResponse);
@@ -115,6 +119,9 @@ public class AiCodeGeneratorFacade {
                         sink.next(JSONUtil.toJsonStr(toolExecutedMessage));
                     })
                     .onCompleteResponse((ChatResponse response) -> {
+                        // 同步构建 Vue 项目
+                        String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/vue_project_" + appId;
+                        vueProjectBuilder.buildProject(projectPath);
                         sink.complete();
                     })
                     .onError((Throwable error) -> {

@@ -15,18 +15,20 @@ import com.ai.codeplatform.model.dto.app.*;
 import com.ai.codeplatform.model.entity.User;
 import com.ai.codeplatform.model.enums.CodeGenTypeEnum;
 import com.ai.codeplatform.model.vo.AppVO;
-import com.ai.codeplatform.service.ProjectDownloadService;
-import com.ai.codeplatform.service.UserService;
+import com.ai.codeplatform.ratelimiter.annotation.RateLimit;
+import com.ai.codeplatform.ratelimiter.enums.RateLimitType;
+import com.ai.codeplatform.service.*;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import com.ai.codeplatform.model.entity.App;
-import com.ai.codeplatform.service.AppService;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -53,6 +55,11 @@ public class AppController {
     @Resource
     private ProjectDownloadService projectDownloadService;
 
+    @Resource
+    private ChatHistoryService chatHistoryService;
+
+    @Resource
+    private ChatHistoryOriginalService chatHistoryOriginalService;
     /**
      * 下载应用代码
      *
@@ -100,6 +107,7 @@ public class AppController {
      * @param request       请求
      * @return 应用 id
      */
+    @RateLimit(limitType = RateLimitType.USER,rate = 5,rateInterval = 60,message = "AI对话请求过于频繁，请稍后再试")
     @PostMapping("/add")
     public BaseResponse<Long> addApp(@RequestBody AppAddRequest appAddRequest, HttpServletRequest request) {
         if (appAddRequest == null) {
@@ -159,6 +167,7 @@ public class AppController {
      * @return 删除结果
      */
     @PostMapping("/delete")
+    @Transactional
     public BaseResponse<Boolean> deleteApp(@RequestBody DeleteRequest deleteRequest, HttpServletRequest request) {
         if (deleteRequest == null || deleteRequest.getId() <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
@@ -175,6 +184,12 @@ public class AppController {
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
         }
         boolean result = appService.removeById(id);
+        QueryWrapper wrapper = QueryWrapper.create().eq("appId", id);
+        boolean remove = chatHistoryService.remove(wrapper);
+        boolean remove1 = chatHistoryOriginalService.remove(wrapper);
+        if (!remove || !remove1 || !result){
+            throw new BusinessException(ErrorCode.OPERATION_ERROR,"会话历史删除失败");
+        }
         return ResultUtils.success(result);
     }
 
@@ -234,6 +249,11 @@ public class AppController {
      * @param appQueryRequest 查询请求
      * @return 精选应用列表
      */
+    @Cacheable(
+            value = "good_app_page",
+            key = "T(com.ai.codeplatform.utils.CacheKeyUtils).generateKey(#appQueryRequest)",
+            condition = "#appQueryRequest.pageNum <= 10"
+    )
     @PostMapping("/good/list/page/vo")
     public BaseResponse<Page<AppVO>> listGoodAppVOByPage(@RequestBody AppQueryRequest appQueryRequest) {
         if (appQueryRequest == null) {
@@ -265,6 +285,7 @@ public class AppController {
      */
     @PostMapping("/admin/delete")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
+    @Transactional
     public BaseResponse<Boolean> deleteAppByAdmin(@RequestBody DeleteRequest deleteRequest) {
         if (deleteRequest == null || deleteRequest.getId() <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
@@ -276,6 +297,12 @@ public class AppController {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
         }
         boolean result = appService.removeById(id);
+        QueryWrapper wrapper = QueryWrapper.create().eq("appId", id);
+        boolean remove = chatHistoryService.remove(wrapper);
+        boolean remove1 = chatHistoryOriginalService.remove(wrapper);
+        if (!remove || !remove1 || !result){
+            throw new BusinessException(ErrorCode.OPERATION_ERROR,"会话历史删除失败");
+        }
         return ResultUtils.success(result);
     }
 

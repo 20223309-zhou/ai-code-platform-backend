@@ -1,6 +1,6 @@
 package com.ai.codeplatform.langgraph4j.node;
 
-import com.ai.codeplatform.langgraph4j.SpringContextUtil;
+import com.ai.codeplatform.utils.SpringContextUtil;
 import com.ai.codeplatform.langgraph4j.ai.ImageCollectionPlanService;
 import com.ai.codeplatform.langgraph4j.model.ImageCollectionPlan;
 import com.ai.codeplatform.langgraph4j.model.ImageResource;
