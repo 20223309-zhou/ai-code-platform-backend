@@ -13,7 +13,6 @@ import com.ai.codeplatform.exception.BusinessException;
 import com.ai.codeplatform.exception.ErrorCode;
 import com.ai.codeplatform.model.dto.app.*;
 import com.ai.codeplatform.model.entity.User;
-import com.ai.codeplatform.model.enums.CodeGenTypeEnum;
 import com.ai.codeplatform.model.vo.AppVO;
 import com.ai.codeplatform.ratelimiter.annotation.RateLimit;
 import com.ai.codeplatform.ratelimiter.enums.RateLimitType;
@@ -54,12 +53,6 @@ public class AppController {
 
     @Resource
     private ProjectDownloadService projectDownloadService;
-
-    @Resource
-    private ChatHistoryService chatHistoryService;
-
-    @Resource
-    private ChatHistoryOriginalService chatHistoryOriginalService;
     /**
      * 下载应用代码
      *
@@ -184,11 +177,8 @@ public class AppController {
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
         }
         boolean result = appService.removeById(id);
-        QueryWrapper wrapper = QueryWrapper.create().eq("appId", id);
-        boolean remove = chatHistoryService.remove(wrapper);
-        boolean remove1 = chatHistoryOriginalService.remove(wrapper);
-        if (!remove || !remove1 || !result){
-            throw new BusinessException(ErrorCode.OPERATION_ERROR,"会话历史删除失败");
+        if (!result){
+            throw new BusinessException(ErrorCode.OPERATION_ERROR,"删除应用失败");
         }
         return ResultUtils.success(result);
     }
@@ -297,11 +287,8 @@ public class AppController {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
         }
         boolean result = appService.removeById(id);
-        QueryWrapper wrapper = QueryWrapper.create().eq("appId", id);
-        boolean remove = chatHistoryService.remove(wrapper);
-        boolean remove1 = chatHistoryOriginalService.remove(wrapper);
-        if (!remove || !remove1 || !result){
-            throw new BusinessException(ErrorCode.OPERATION_ERROR,"会话历史删除失败");
+        if (!result){
+            throw new BusinessException(ErrorCode.OPERATION_ERROR,"应用删除失败");
         }
         return ResultUtils.success(result);
     }
