@@ -73,7 +73,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     @Resource
     private ChatHistoryOriginalService chatHistoryOriginalService;
 
-    @Value("${code.deploy-path=http://150.158.92.249/dist}")
+    @Value("${code.deploy-path:http://150.158.92.249/dist}")
     private String deployHost;
     /**
      * 创建应用
