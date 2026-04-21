@@ -107,6 +107,9 @@ public class WebScreenshotUtils {
             WebDriverManager.chromedriver().setup();
             // 配置 Chrome 选项
             ChromeOptions options = new ChromeOptions();
+
+            options.setBinary("/usr/bin/chromium-browser");
+
             // 无头模式
             options.addArguments("--headless");
             // 禁用GPU（在某些环境下避免问题）
