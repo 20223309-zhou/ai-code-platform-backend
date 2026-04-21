@@ -1,6 +1,7 @@
 package com.ai.codeplatform.controller;
 
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.ai.codeplatform.annotation.AuthCheck;
@@ -22,6 +23,7 @@ import com.mybatisflex.core.query.QueryWrapper;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
@@ -41,6 +43,7 @@ import java.util.Map;
  *
  * @author Administrator
  */
+@Slf4j
 @RestController
 @RequestMapping("/app")
 public class AppController {
@@ -53,6 +56,7 @@ public class AppController {
 
     @Resource
     private ProjectDownloadService projectDownloadService;
+
     /**
      * 下载应用代码
      *
@@ -65,12 +69,12 @@ public class AppController {
                                 HttpServletRequest request,
                                 HttpServletResponse response) {
         // 1. 基础校验
-        if(appId == null || appId <= 0){
+        if (appId == null || appId <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "应用ID无效");
         }
         // 2. 查询应用信息
         App app = appService.getById(appId);
-        if (app == null){
+        if (app == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "应用不存在");
         }
         // 3. 权限校验：只有应用创建者可以下载代码
@@ -84,7 +88,7 @@ public class AppController {
         String sourceDirPath = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + sourceDirName;
         // 5. 检查代码目录是否存在
         File sourceDir = new File(sourceDirPath);
-        if (!sourceDir.exists() || !sourceDir.isDirectory()){
+        if (!sourceDir.exists() || !sourceDir.isDirectory()) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "应用代码不存在，请先生成代码");
         }
         // 6. 生成下载文件名（不建议添加中文内容）
@@ -100,7 +104,7 @@ public class AppController {
      * @param request       请求
      * @return 应用 id
      */
-    @RateLimit(limitType = RateLimitType.USER,rate = 5,rateInterval = 60,message = "AI对话请求过于频繁，请稍后再试")
+    @RateLimit(limitType = RateLimitType.USER, rate = 5, rateInterval = 60, message = "AI对话请求过于频繁，请稍后再试")
     @PostMapping("/add")
     public BaseResponse<Long> addApp(@RequestBody AppAddRequest appAddRequest, HttpServletRequest request) {
         if (appAddRequest == null) {
@@ -114,7 +118,6 @@ public class AppController {
         App app = appService.createApp(appAddRequest, request, initPrompt);
         return ResultUtils.success(app.getId());
     }
-
 
 
     /**
@@ -160,7 +163,6 @@ public class AppController {
      * @return 删除结果
      */
     @PostMapping("/delete")
-    @Transactional
     public BaseResponse<Boolean> deleteApp(@RequestBody DeleteRequest deleteRequest, HttpServletRequest request) {
         if (deleteRequest == null || deleteRequest.getId() <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
@@ -177,9 +179,11 @@ public class AppController {
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
         }
         boolean result = appService.removeById(id);
-        if (!result){
-            throw new BusinessException(ErrorCode.OPERATION_ERROR,"删除应用失败");
+        if (!result) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "删除应用失败");
         }
+        // 异步删除应用目录和部署目录
+        Thread.ofVirtual().start(() -> deleteOutputDirAndDeployDir(oldApp));
         return ResultUtils.success(result);
     }
 
@@ -275,7 +279,6 @@ public class AppController {
      */
     @PostMapping("/admin/delete")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
-    @Transactional
     public BaseResponse<Boolean> deleteAppByAdmin(@RequestBody DeleteRequest deleteRequest) {
         if (deleteRequest == null || deleteRequest.getId() <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
@@ -287,9 +290,11 @@ public class AppController {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
         }
         boolean result = appService.removeById(id);
-        if (!result){
-            throw new BusinessException(ErrorCode.OPERATION_ERROR,"应用删除失败");
+        if (!result) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "应用删除失败");
         }
+        // 异步删除应用目录和部署目录
+        Thread.ofVirtual().start(() -> deleteOutputDirAndDeployDir(oldApp));
         return ResultUtils.success(result);
     }
 
@@ -368,7 +373,8 @@ public class AppController {
 
     /**
      * 聊天生成代码
-     * @param appId 应用ID
+     *
+     * @param appId   应用ID
      * @param message 用户消息
      * @param request 请求
      * @return 生成的代码
@@ -416,11 +422,11 @@ public class AppController {
      */
     @PostMapping("/deploy")
     public BaseResponse<String> deployApp(@RequestBody AppDeployRequest appDeployRequest, HttpServletRequest request) {
-        if (appDeployRequest == null){
+        if (appDeployRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         Long appId = appDeployRequest.getAppId();
-        if (appId == null || appId <= 0){
+        if (appId == null || appId <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
         }
         // 获取当前登录用户
@@ -430,5 +436,38 @@ public class AppController {
         return ResultUtils.success(deployUrl);
     }
 
-
+    // 删除应用输出目录和部署目录
+    private void deleteOutputDirAndDeployDir(App app) {
+        // 删除本地应用目录
+        String dirName = app.getCodeGenType() + "_" + app.getId();
+        String outputDir = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + dirName;
+        boolean exist = FileUtil.exist(new File(outputDir));
+        if (!exist) {
+            log.info("不存在的应用输出目录：{}", outputDir);
+        } else {
+            boolean del = FileUtil.del(outputDir);
+            if (!del) {
+                log.warn("删除应用输出目录失败，应用目录：{}", outputDir);
+            } else {
+                log.info("删除应用输出目录成功，应用目录：{}", outputDir);
+            }
+        }
+        // 删除部署目录
+        if (app.getDeployKey() == null) {
+            log.info("应用未部署，不存在部署密钥,不需要删除部署目录");
+        } else {
+            String deployDir = AppConstant.CODE_DEPLOY_ROOT_DIR + File.separator + app.getDeployKey();
+            boolean isExist = FileUtil.exist(new File(deployDir));
+            if (!isExist) {
+                log.info("不存在的应用部署目录：{}", deployDir);
+            } else {
+                boolean resultDel = FileUtil.del(deployDir);
+                if (!resultDel) {
+                    log.warn("删除应用部署文件失败，部署目录：{}", deployDir);
+                } else {
+                    log.info("删除应用部署文件成功，部署目录：{}", deployDir);
+                }
+            }
+        }
+    }
 }
