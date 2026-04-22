@@ -26,19 +26,6 @@ import java.time.Duration;
 @Slf4j
 public class WebScreenshotUtils {
 
-    private static final WebDriver webDriver;
-
-    static {
-        final int DEFAULT_WIDTH = 1600;
-        final int DEFAULT_HEIGHT = 900;
-        webDriver = initChromeDriver(DEFAULT_WIDTH, DEFAULT_HEIGHT);
-    }
-
-    @PreDestroy
-    public void destroy() {
-        webDriver.quit();
-    }
-
     /**
      * 生成网页截图
      *
@@ -50,7 +37,11 @@ public class WebScreenshotUtils {
             log.error("网页URL不能为空");
             return null;
         }
+        WebDriver webDriver = null;
         try {
+            // 每次创建新 driver
+            webDriver = createChromeDriver(1600, 900);
+
             // 创建临时目录
             String rootPath = System.getProperty("user.dir") + File.separator + "tmp" + File.separator + "screenshots"
                     + File.separator + UUID.randomUUID().toString().substring(0, 8);
@@ -79,7 +70,36 @@ public class WebScreenshotUtils {
         } catch (Exception e) {
             log.error("网页截图失败: {}", webUrl, e);
             return null;
+        }finally {
+            if (webDriver != null) {
+                try {
+                    webDriver.quit(); // 关键：释放资源
+                } catch (Exception ex) {
+                    log.warn("关闭 WebDriver 时出错", ex);
+                }
+            }
         }
+    }
+
+    private static WebDriver createChromeDriver(int width, int height) {
+        WebDriverManager.chromedriver().browserVersion("126").setup(); // 自动匹配 Chromium 126
+
+        ChromeOptions options = new ChromeOptions();
+        options.setBinary("/usr/bin/chromium-browser");
+        options.addArguments(
+                "--headless",
+                "--no-sandbox",
+                "--disable-gpu",
+                "--disable-dev-shm-usage",
+                "--window-size=" + width + "," + height,
+                "--disable-extensions",
+                "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        );
+
+        WebDriver driver = new ChromeDriver(options);
+        driver.manage().timeouts().pageLoadTimeout(Duration.ofSeconds(30));
+        driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(10));
+        return driver;
     }
 
     /**
@@ -104,7 +124,7 @@ public class WebScreenshotUtils {
     private static WebDriver initChromeDriver(int width, int height) {
         try {
             // 自动管理 ChromeDriver
-            WebDriverManager.chromedriver().setup();
+            WebDriverManager.chromedriver().browserVersion("126").setup();
             // 配置 Chrome 选项
             ChromeOptions options = new ChromeOptions();
 
