@@ -82,10 +82,9 @@ public class WebScreenshotUtils {
     }
 
     private static WebDriver createChromeDriver(int width, int height) {
-        WebDriverManager.chromedriver().browserVersion("126").setup(); // 自动匹配 Chromium 126
+        WebDriverManager.chromedriver().setup(); // 自动匹配 Chromium 126
 
         ChromeOptions options = new ChromeOptions();
-        options.setBinary("/usr/bin/chromium-browser");
         options.addArguments(
                 "--headless",
                 "--no-sandbox",

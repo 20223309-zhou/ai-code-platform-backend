@@ -28,7 +28,7 @@ public abstract class BaseTool {
      * @return 工具请求显示内容
      */
     public String generateToolRequestResponse() {
-        return String.format("\n\n[选择工具] %s\n\n", getDisplayName());
+        return String.format("\n\n\uD83D\uDEE0\uFE0F[选择工具] %s\n\n", getDisplayName());
     }
 
     /**
