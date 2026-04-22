@@ -58,6 +58,6 @@ public class FileReadTool extends BaseTool {
     @Override
     public String generateToolExecutedResult(JSONObject arguments) {
         String relativeFilePath = arguments.getStr("relativeFilePath");
-        return String.format("[工具调用] %s %s", getDisplayName(), relativeFilePath);
+        return String.format("\uD83D\uDCC4[工具调用] %s %s", getDisplayName(), relativeFilePath);
     }
 }
