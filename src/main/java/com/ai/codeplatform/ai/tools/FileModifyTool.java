@@ -77,7 +77,7 @@ public class FileModifyTool extends BaseTool {
         String newContent = arguments.getStr("newContent");
         // 显示对比内容
         return String.format("""
-                [工具调用] %s %s
+                🔧[工具调用] %s %s
                 
                 替换前：
                 ```
