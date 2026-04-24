@@ -23,7 +23,7 @@ langchain4j:
       base-url: ${AI_BASE_URL}
       api-key: ${AI_API_KEY}
       model-name: ${AI_MODEL_NAME}
-      max-tokens: 32768
+      max-tokens: 62768
       temperature: 0.1
       log-requests: true
       log-responses: true
@@ -73,4 +73,4 @@ dashscope:
 
 #部署路径
 code:
-  deploy-path: http://150.158.92.249/dist
+  deploy-path: http://www.icodeplay.site/dist
