@@ -7,7 +7,10 @@ spring:
   session:
     store-type: redis
     timeout: 2592000
-
+  # 文件上传大小限制
+  servlet:
+    multipart:
+      max-file-size: 10MB
 server:
   port: 8082
   servlet:

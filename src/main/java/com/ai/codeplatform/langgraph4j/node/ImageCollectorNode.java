@@ -27,8 +27,11 @@ public class ImageCollectorNode {
 
     public static AsyncNodeAction<MessagesState<String>> create() {
         return node_async(state -> {
+            // 获取输入
             WorkflowContext context = WorkflowContext.getContext(state);
+            // 拿到原始提示词
             String originalPrompt = context.getOriginalPrompt();
+            // 定义图片集合，用作存储图片
             List<ImageResource> collectedImages = new ArrayList<>();
 
             try {
