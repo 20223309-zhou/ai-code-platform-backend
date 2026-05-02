@@ -8,22 +8,18 @@ import com.ai.codeplatform.common.ResultUtils;
 import com.ai.codeplatform.constant.UserConstant;
 import com.ai.codeplatform.exception.BusinessException;
 import com.ai.codeplatform.exception.ErrorCode;
+import com.ai.codeplatform.manager.CosManager;
 import com.ai.codeplatform.model.dto.user.*;
 import com.ai.codeplatform.model.vo.LoginUserVO;
 import com.ai.codeplatform.model.vo.UserVO;
 import com.mybatisflex.core.paginate.Page;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.beans.BeanUtils;
+import org.springframework.web.bind.annotation.*;
 import com.ai.codeplatform.model.entity.User;
 import com.ai.codeplatform.service.UserService;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -39,6 +35,8 @@ public class UserController {
     @Resource
     private UserService userService;
 
+    @Resource
+    private CosManager cosManager;
     /**
      * 用户注册
      *
@@ -161,7 +159,7 @@ public class UserController {
     }
 
     /**
-     * 更新用户
+     * 修改用户信息（管理员）
      */
     @PostMapping("/update")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
@@ -177,6 +175,35 @@ public class UserController {
         }
         return ResultUtils.success(true);
     }
+
+    /**
+     * 修改用户信息(用户)
+     */
+    @PostMapping("/update/my")
+    @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
+    public BaseResponse<Boolean> updateUserBySelf(UserUpdateRequest userUpdateRequest
+            , HttpServletRequest request,@RequestPart(value = "file", required = false) MultipartFile file) {
+        if (userUpdateRequest == null || userUpdateRequest.getId() == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        // 判断修改用户信息的是否是自己本身
+        if (!userUpdateRequest.getId().equals(userService.getLoginUser(request).getId())){
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
+        }
+        User user = new User();
+        BeanUtils.copyProperties(userUpdateRequest, user);
+        // 上传头像
+        String userAvatar = cosManager.putUserAvatar(user.getId(), file);
+        if(userAvatar != null){
+            user.setUserAvatar(userAvatar);
+        }
+        boolean result = userService.updateById(user);
+        if(!result){
+            throw new BusinessException(ErrorCode.OPERATION_ERROR);
+        }
+        return ResultUtils.success(true);
+    }
+
 
     /**
      * 分页获取用户封装列表（仅管理员）
