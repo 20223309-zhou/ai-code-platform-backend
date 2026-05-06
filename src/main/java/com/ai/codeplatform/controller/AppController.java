@@ -5,6 +5,7 @@ import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.ai.codeplatform.annotation.AuthCheck;
+import com.ai.codeplatform.annotation.LogRecord;
 import com.ai.codeplatform.common.BaseResponse;
 import com.ai.codeplatform.common.DeleteRequest;
 import com.ai.codeplatform.common.ResultUtils;
@@ -104,6 +105,7 @@ public class AppController {
      * @param request       请求
      * @return 应用 id
      */
+    @LogRecord
     @RateLimit(limitType = RateLimitType.USER, rate = 5, rateInterval = 60, message = "AI对话请求过于频繁，请稍后再试")
     @PostMapping("/add")
     public BaseResponse<Long> addApp(@RequestBody AppAddRequest appAddRequest, HttpServletRequest request) {
@@ -162,6 +164,7 @@ public class AppController {
      * @param request       请求
      * @return 删除结果
      */
+    @LogRecord
     @PostMapping("/delete")
     public BaseResponse<Boolean> deleteApp(@RequestBody DeleteRequest deleteRequest, HttpServletRequest request) {
         if (deleteRequest == null || deleteRequest.getId() <= 0) {
@@ -277,6 +280,7 @@ public class AppController {
      * @param deleteRequest 删除请求
      * @return 删除结果
      */
+    @LogRecord
     @PostMapping("/admin/delete")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public BaseResponse<Boolean> deleteAppByAdmin(@RequestBody DeleteRequest deleteRequest) {
@@ -379,6 +383,7 @@ public class AppController {
      * @param request 请求
      * @return 生成的代码
      */
+    @LogRecord
     @GetMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> chatToGenCode(@RequestParam Long appId,
                                                        @RequestParam String message,
