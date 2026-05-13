@@ -105,6 +105,7 @@ public class AppController {
      * @param request       请求
      * @return 应用 id
      */
+    @LogRecord(description = "创建APP应用")
     @RateLimit(limitType = RateLimitType.USER, rate = 5, rateInterval = 60, message = "AI对话请求过于频繁，请稍后再试")
     @PostMapping("/add")
     public BaseResponse<Long> addApp(@RequestBody AppAddRequest appAddRequest, HttpServletRequest request) {

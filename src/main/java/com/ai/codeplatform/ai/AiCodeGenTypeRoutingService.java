@@ -7,7 +7,6 @@ import dev.langchain4j.service.SystemMessage;
  * AI代码生成类型智能路由服务
  * 使用结构化输出直接返回枚举类型
  *
- * @author yupi
  */
 public interface AiCodeGenTypeRoutingService {
 
@@ -19,4 +18,7 @@ public interface AiCodeGenTypeRoutingService {
      */
     @SystemMessage(fromResource = "prompt/codegen-routing-system-prompt.txt")
     CodeGenTypeEnum routeCodeGenType(String userPrompt);
+
+    @SystemMessage(fromResource = "prompt/codegen-isDesignRelated-system-prompt.txt")
+    boolean isDesignRelated(String userPrompt);
 }
