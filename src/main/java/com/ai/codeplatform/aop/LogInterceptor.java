@@ -3,10 +3,14 @@ package com.ai.codeplatform.aop;
 import cn.hutool.core.util.ReflectUtil;
 import cn.hutool.json.JSONUtil;
 import com.ai.codeplatform.annotation.LogRecord;
+import com.ai.codeplatform.common.BaseResponse;
 import com.ai.codeplatform.constant.UserConstant;
+import com.ai.codeplatform.exception.BusinessException;
+import com.ai.codeplatform.model.entity.App;
 import com.ai.codeplatform.model.entity.SysOperationLog;
 import com.ai.codeplatform.model.entity.User;
 import com.ai.codeplatform.service.SysOperationLogService;
+import com.fasterxml.jackson.databind.ser.Serializers;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -36,88 +40,6 @@ public class LogInterceptor {
     private SysOperationLogService sysOperationLogService;
     @Around("@annotation(logRecord)")
     public Object doInterceptor(ProceedingJoinPoint joinPoint, LogRecord logRecord) {
-        RequestAttributes requestAttributes = RequestContextHolder.getRequestAttributes();
-        ServletRequestAttributes servletRequestAttributes = (ServletRequestAttributes) requestAttributes;
-        HttpServletRequest request = servletRequestAttributes.getRequest();
-        // 获取当前用户
-        Object user = request.getSession().getAttribute(UserConstant.USER_LOGIN_STATE);
-        User loginUser = (User) user;
-        Long userId = loginUser.getId();
-        String userName = loginUser.getUserName();
-        // 获取远程地址
-        String ipAddress = getIpAddress(request);
-        // 获取请求路径
-        String requestURI = request.getRequestURI();
-        // 获取请求方式
-        String requestMethod = request.getMethod();
-        //获取appId
-        Long appId = extractAppId(joinPoint);
-        long startTime = System.currentTimeMillis();
-        SysOperationLog logInfo = SysOperationLog.builder()
-                .appId(appId)
-                .userId(userId)
-                .username(userName)
-                .ipAddress(ipAddress)
-                .requestUri(requestURI)
-                .requestMethod(requestMethod)
-                .startTime(LocalDateTime.now())
-                .operation(logRecord.description())
-                .createTime(LocalDateTime.now())
-                .status("RUNNING")
-                .build();
-        Object result = null;
-        try {
-            // 执行方法
-            result =joinPoint.proceed();
-            if (result instanceof Flux<?>){
-                Flux<?> flux = (Flux<?>) result;
-                // 在流完成时记录日志
-                return flux
-                        .doOnComplete(() -> {
-                            recordLog(joinPoint,logInfo,startTime);
-                            saveLog(logInfo);
-                        })
-                        .doOnError(error -> {
-                            long duration = System.currentTimeMillis() - startTime;
-                            logInfo.setEndTime(LocalDateTime.now());
-                            logInfo.setDurationMs((int) duration);
-                            logInfo.setStatus("FAILED");
-                            saveLog(logInfo);
-                            log.error("流式接口调用异常");
-                        });
-            }
-            recordLog(joinPoint, logInfo, startTime);
-            saveLog(logInfo);
-        } catch (Throwable e) {
-            // 记录失败状态
-            logInfo.setStatus("FAILED");
-            logInfo.setEndTime(LocalDateTime.now());
-            logInfo.setDurationMs((int) (System.currentTimeMillis() - startTime));
-            log.error("接口调用异常", e);
-            saveLog(logInfo);
-        }
-        return result;
-    }
-
-    /**
-     * 保存日志
-     *
-     * @param logInfo 日志信息
-     */
-    private void saveLog(SysOperationLog logInfo) {
-        boolean isSuccess = sysOperationLogService.save(logInfo);
-        if (!isSuccess){
-            log.error("接口调用日志写入数据库失败");
-        }
-    }
-
-    /**
-     * 补充日志记录字段
-     * @param joinPoint
-     * @param logInfo
-     * @param startTime
-     */
-    private void recordLog(ProceedingJoinPoint joinPoint, SysOperationLog logInfo, long startTime) {
         Signature signature = joinPoint.getSignature();
         MethodSignature mSignature = (MethodSignature) signature;
         // 获取方法名
@@ -145,12 +67,100 @@ public class LogInterceptor {
                     return JSONUtil.toJsonStr(arg);
                 })
                 .collect(Collectors.toList());
+        RequestAttributes requestAttributes = RequestContextHolder.getRequestAttributes();
+        ServletRequestAttributes servletRequestAttributes = (ServletRequestAttributes) requestAttributes;
+        HttpServletRequest request = servletRequestAttributes.getRequest();
+        // 获取当前用户
+        Object user = request.getSession().getAttribute(UserConstant.USER_LOGIN_STATE);
+        User loginUser = (User) user;
+        Long userId = loginUser.getId();
+        String userName = loginUser.getUserName();
+        // 获取远程地址
+        String ipAddress = getIpAddress(request);
+        // 获取请求路径
+        String requestURI = request.getRequestURI();
+        // 获取请求方式
+        String requestMethod = request.getMethod();
+        //获取appId
+        Long appId = extractAppId(joinPoint);
+        long startTime = System.currentTimeMillis();
+        SysOperationLog logInfo = SysOperationLog.builder()
+                .requestParams(JSONUtil.toJsonStr(argsList))
+                .methodName(methodName)
+                .appId(appId)
+                .userId(userId)
+                .username(userName)
+                .ipAddress(ipAddress)
+                .requestUri(requestURI)
+                .requestMethod(requestMethod)
+                .startTime(LocalDateTime.now())
+                .operation(logRecord.description())
+                .createTime(LocalDateTime.now())
+                .status("RUNNING")
+                .build();
+        Object result = null;
+        try {
+            // 执行方法
+            result =joinPoint.proceed();
+            if (result instanceof BaseResponse<?>){
+                BaseResponse baseResponse = (BaseResponse) result;
+                Long appId2 = (Long) baseResponse.getData();
+                logInfo.setAppId(appId2);
+            }
+            if (result instanceof Flux<?>){
+                Flux<?> flux = (Flux<?>) result;
+                // 在流完成时记录日志
+                return flux
+                        .doOnComplete(() -> {
+                            recordLog(logInfo,startTime);
+                            saveLog(logInfo);
+                        })
+                        .doOnError(error -> {
+                            long duration = System.currentTimeMillis() - startTime;
+                            logInfo.setEndTime(LocalDateTime.now());
+                            logInfo.setDurationMs((int) duration);
+                            logInfo.setStatus("FAILED");
+                            saveLog(logInfo);
+                            log.error("流式接口调用异常");
+                        });
+            }
+            recordLog(logInfo, startTime);
+            saveLog(logInfo);
+        } catch (Throwable e) {
+            if (e instanceof BusinessException){
+                throw new BusinessException(((BusinessException) e).getCode(), e.getMessage());
+            }
+            // 记录失败状态
+            logInfo.setStatus("FAILED");
+            logInfo.setEndTime(LocalDateTime.now());
+            logInfo.setDurationMs((int) (System.currentTimeMillis() - startTime));
+            log.error("接口调用异常", e);
+            saveLog(logInfo);
+        }
+        return result;
+    }
 
+    /**
+     * 保存日志
+     *
+     * @param logInfo 日志信息
+     */
+    private void saveLog(SysOperationLog logInfo) {
+        boolean isSuccess = sysOperationLogService.save(logInfo);
+        if (!isSuccess){
+            log.error("接口调用日志写入数据库失败");
+        }
+    }
+
+    /**
+     * 补充日志记录成功字段
+     * @param logInfo
+     * @param startTime
+     */
+    private void recordLog(SysOperationLog logInfo, long startTime) {
         logInfo.setEndTime(LocalDateTime.now());
         logInfo.setDurationMs((int) (System.currentTimeMillis() - startTime));
         logInfo.setStatus("SUCCESS");
-        logInfo.setMethodName(methodName);
-        logInfo.setRequestParams(JSONUtil.toJsonStr(argsList));
     }
 
     /**
