@@ -105,7 +105,7 @@ public class AppController {
      * @param request       请求
      * @return 应用 id
      */
-    @LogRecord
+    @LogRecord(description = "创建应用")
     @RateLimit(limitType = RateLimitType.USER, rate = 5, rateInterval = 60, message = "AI对话请求过于频繁，请稍后再试")
     @PostMapping("/add")
     public BaseResponse<Long> addApp(@RequestBody AppAddRequest appAddRequest, HttpServletRequest request) {
@@ -164,7 +164,7 @@ public class AppController {
      * @param request       请求
      * @return 删除结果
      */
-    @LogRecord
+    @LogRecord(description = "用户删除应用")
     @PostMapping("/delete")
     public BaseResponse<Boolean> deleteApp(@RequestBody DeleteRequest deleteRequest, HttpServletRequest request) {
         if (deleteRequest == null || deleteRequest.getId() <= 0) {
@@ -280,7 +280,7 @@ public class AppController {
      * @param deleteRequest 删除请求
      * @return 删除结果
      */
-    @LogRecord
+    @LogRecord(description = "管理员删除应用")
     @PostMapping("/admin/delete")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public BaseResponse<Boolean> deleteAppByAdmin(@RequestBody DeleteRequest deleteRequest) {
@@ -383,7 +383,7 @@ public class AppController {
      * @param request 请求
      * @return 生成的代码
      */
-    @LogRecord
+    @LogRecord(description = "开始生成代码")
     @GetMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> chatToGenCode(@RequestParam Long appId,
                                                        @RequestParam String message,

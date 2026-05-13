@@ -1,17 +1,18 @@
-package com.ai.codeplatform.model.dto.log;
+package com.ai.codeplatform.model.entity;
 
-import com.ai.codeplatform.common.PageRequest;
+import com.mybatisflex.annotation.Column;
 import com.mybatisflex.annotation.Id;
 import com.mybatisflex.annotation.KeyType;
 import com.mybatisflex.annotation.Table;
+import java.io.Serializable;
+import java.time.LocalDateTime;
+
+import java.io.Serial;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.io.Serial;
-import java.io.Serializable;
-import java.time.LocalDateTime;
 
 /**
  * 系统操作日志表 实体类。
@@ -23,7 +24,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Table("sys_operation_log")
-public class LogQueryRequest extends PageRequest implements Serializable {
+public class SysOperationLog implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;
@@ -31,6 +32,7 @@ public class LogQueryRequest extends PageRequest implements Serializable {
     /**
      * 主键ID
      */
+    @Id(keyType = KeyType.Auto)
     private Long id;
 
     /**
@@ -42,16 +44,6 @@ public class LogQueryRequest extends PageRequest implements Serializable {
      * 用户姓名(冗余字段，方便查询)
      */
     private String username;
-
-    /**
-     * 状态
-     */
-    private String status;
-
-    /**
-     * 操作说明
-     */
-    private String operation;
 
     /**
      * 请求IP地址
@@ -82,5 +74,45 @@ public class LogQueryRequest extends PageRequest implements Serializable {
      * 操作时间
      */
     private LocalDateTime createTime;
+
+    /**
+     * 开始时间
+     */
+    @Column("startTime")
+    private LocalDateTime startTime;
+
+    /**
+     * 结束时间
+     */
+    @Column("endTime")
+    private LocalDateTime endTime;
+
+    /**
+     * 耗时（毫秒）
+     */
+    @Column("durationMs")
+    private Integer durationMs;
+
+    /**
+     * 方法操作说明
+     */
+    private String operation;
+
+    /**
+     * 状态：SUCCESS/FAILED
+     */
+    private String status;
+
+    /**
+     * 更新时间
+     */
+    @Column("updateTime")
+    private LocalDateTime updateTime;
+
+    /**
+     * 是否删除
+     */
+    @Column(value = "isDelete", isLogicDelete = true)
+    private Integer isDelete;
 
 }
