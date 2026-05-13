@@ -41,6 +41,11 @@ public class SysOperationLog implements Serializable {
     private Long userId;
 
     /**
+     * 应用ID
+     */
+    private Long appId;
+
+    /**
      * 用户姓名(冗余字段，方便查询)
      */
     private String username;

@@ -1,5 +1,6 @@
 package com.ai.codeplatform.aop;
 
+import cn.hutool.core.util.ReflectUtil;
 import cn.hutool.json.JSONUtil;
 import com.ai.codeplatform.annotation.LogRecord;
 import com.ai.codeplatform.constant.UserConstant;
@@ -21,6 +22,7 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import reactor.core.publisher.Flux;
 
+import java.lang.reflect.Field;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
@@ -48,8 +50,11 @@ public class LogInterceptor {
         String requestURI = request.getRequestURI();
         // 获取请求方式
         String requestMethod = request.getMethod();
+        //获取appId
+        Long appId = extractAppId(joinPoint);
         long startTime = System.currentTimeMillis();
         SysOperationLog logInfo = SysOperationLog.builder()
+                .appId(appId)
                 .userId(userId)
                 .username(userName)
                 .ipAddress(ipAddress)
@@ -127,7 +132,18 @@ public class LogInterceptor {
                     }
                     return true;
                 })
-                .map(JSONUtil::toJsonStr)
+                .map(arg -> {
+                    // 2. 对简单类型直接转为字符串，避免序列化为 {}
+                    if (arg == null) {
+                        return "null";
+                    }
+                    if (arg instanceof String || arg instanceof Number ||
+                            arg instanceof Boolean || arg instanceof Character) {
+                        return arg.toString();
+                    }
+                    // 3. 复杂对象使用 JSON 序列化
+                    return JSONUtil.toJsonStr(arg);
+                })
                 .collect(Collectors.toList());
 
         logInfo.setEndTime(LocalDateTime.now());
@@ -164,4 +180,44 @@ public class LogInterceptor {
         return ip;
     }
 
+    /**
+     * 从方法参数中提取 appId
+     *
+     * @param joinPoint 切点
+     * @return appId，如果无法提取则返回 null
+     */
+    private Long extractAppId(ProceedingJoinPoint joinPoint) {
+        try {
+            MethodSignature signature = (MethodSignature) joinPoint.getSignature();
+            String methodName = signature.getMethod().getName();
+            Object[] args = joinPoint.getArgs();
+
+            // 方法1: chatToGenCode - 直接从 @RequestParam 参数获取
+            if ("chatToGenCode".equals(methodName) && args.length >= 1) {
+                if (args[0] instanceof Long) {
+                    return (Long) args[0];
+                }
+            }
+
+            // 方法2 & 3: deleteApp / deleteAppByAdmin - 从 DeleteRequest 对象获取
+            if ("deleteApp".equals(methodName) || "deleteAppByAdmin".equals(methodName)) {
+                if (args.length >= 1 && args[0] != null) {
+                    // 通过反射获取 id 字段
+                    Field idField = ReflectUtil.getField(args[0].getClass(), "id");
+                    if (idField != null) {
+                        ReflectUtil.setAccessible(idField);
+                        Object idValue = ReflectUtil.getFieldValue(args[0], idField);
+                        if (idValue instanceof Long) {
+                            return (Long) idValue;
+                        } else if (idValue instanceof Number) {
+                            return ((Number) idValue).longValue();
+                        }
+                    }
+                }
+            }
+        }catch (Exception e) {
+            log.warn("提取 appId 失败: {}", e.getMessage());
+        }
+        return null;
+    }
 }

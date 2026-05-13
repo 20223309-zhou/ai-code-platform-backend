@@ -1,5 +1,7 @@
 package com.ai.codeplatform.core.handler;
 
+import com.ai.codeplatform.exception.BusinessException;
+import com.ai.codeplatform.exception.ErrorCode;
 import com.ai.codeplatform.model.entity.User;
 import com.ai.codeplatform.model.enums.CodeGenTypeEnum;
 import com.ai.codeplatform.service.ChatHistoryOriginalService;
@@ -41,6 +43,7 @@ public class StreamHandlerExecutor {
                     jsonMessageStreamHandler.handle(originFlux, chatHistoryService, chatHistoryOriginalService,appId, loginUser);
             case HTML, MULTI_FILE -> // 简单文本处理器不需要依赖注入
                     new SimpleTextStreamHandler().handle(originFlux, chatHistoryService, appId, loginUser);
+            case WARNING -> throw new BusinessException(ErrorCode.SYSTEM_ERROR,"提示词异常");
         };
     }
 }

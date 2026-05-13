@@ -96,6 +96,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         // ai智能选择代码生成类型
         AiCodeGenTypeRoutingService routingService = aiCodeGenTypeRoutingServiceFactory.createAiCodeGenTypeRoutingService();
         CodeGenTypeEnum selectedCodeGenType = routingService.routeCodeGenType(initPrompt);
+        if (selectedCodeGenType == CodeGenTypeEnum.WARNING){
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "禁止输入无关的提示词");
+        }
         if (selectedCodeGenType == null){
             selectedCodeGenType = CodeGenTypeEnum.MULTI_FILE;
         }
