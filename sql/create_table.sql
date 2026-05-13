@@ -68,3 +68,32 @@ create table chat_history_original
     INDEX idx_createTime (createTime),             -- 提升基于时间的查询性能
     INDEX idx_appId_createTime (appId, createTime) -- 游标查询核心索引
 ) comment '对话历史' collate = utf8mb4_unicode_ci;
+
+-- 日志记录表 --
+CREATE TABLE `sys_operation_log`
+(
+    `id`             bigint      NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `user_id`        bigint               DEFAULT NULL COMMENT '用户ID',
+    `username`       varchar(64)          DEFAULT '' COMMENT '用户姓名(冗余字段，方便查询)',
+    `ip_address`     varchar(50)          DEFAULT '' COMMENT '请求IP地址',
+    `request_uri`    varchar(255)         DEFAULT '' COMMENT '请求路径(URI)',
+    `request_method` varchar(10)          DEFAULT '' COMMENT '请求方式(GET/POST/PUT/DELETE)',
+    `method_name`    varchar(100)         DEFAULT '' COMMENT '方法名',
+    `request_params` text COMMENT '请求参数(JSON字符串)',
+    `create_time`    datetime             DEFAULT CURRENT_TIMESTAMP COMMENT '操作时间',
+    `startTime`      datetime    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '开始时间',
+    `endTime`        datetime             DEFAULT NULL COMMENT '结束时间',
+    `durationMs`     int                  DEFAULT NULL COMMENT '耗时（毫秒）',
+    `operation`      varchar(80)          DEFAULT NULL COMMENT '方法操作说明',
+    `status`         varchar(20) NOT NULL COMMENT '状态：SUCCESS/FAILED',
+    `updateTime`     datetime    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `isDelete`       tinyint     NOT NULL DEFAULT '0' COMMENT '是否删除',
+    PRIMARY KEY (`id`),
+    KEY `idx_user_id` (`user_id`),
+    KEY `idx_create_time` (`create_time`),
+    KEY `idx_request_uri` (`request_uri`),
+    KEY `idx_status` (`status`)
+) ENGINE = InnoDB
+  AUTO_INCREMENT = 4
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_0900_ai_ci COMMENT ='系统操作日志表'

@@ -44,6 +44,16 @@ public class LogQueryRequest extends PageRequest implements Serializable {
     private String username;
 
     /**
+     * 状态
+     */
+    private String status;
+
+    /**
+     * 操作说明
+     */
+    private String operation;
+
+    /**
      * 请求IP地址
      */
     private String ipAddress;
