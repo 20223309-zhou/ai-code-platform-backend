@@ -21,6 +21,11 @@ public class AppQueryRequest extends PageRequest implements Serializable {
     private String appName;
 
     /**
+     * 应用分类
+     */
+    private String category;
+
+    /**
      * 应用封面
      */
     private String cover;

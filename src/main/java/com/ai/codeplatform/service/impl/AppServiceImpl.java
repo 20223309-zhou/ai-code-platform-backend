@@ -280,6 +280,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         String deployKey = appQueryRequest.getDeployKey();
         Integer priority = appQueryRequest.getPriority();
         Long userId = appQueryRequest.getUserId();
+        String searchCategory = appQueryRequest.getCategory();
         String sortField = appQueryRequest.getSortField();
         String sortOrder = appQueryRequest.getSortOrder();
         return QueryWrapper.create()
@@ -291,6 +292,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
                 .eq("deployKey", deployKey)
                 .eq("priority", priority)
                 .eq("userId", userId)
+                .eq("category", StrUtil.isNotBlank(searchCategory) ? searchCategory : null)
                 .orderBy(sortField, "ascend".equals(sortOrder));
     }
 
