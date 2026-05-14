@@ -104,8 +104,15 @@ public class LogInterceptor {
             result =joinPoint.proceed();
             if (result instanceof BaseResponse<?>){
                 BaseResponse baseResponse = (BaseResponse) result;
-                Long appId2 = (Long) baseResponse.getData();
-                logInfo.setAppId(appId2);
+                Object data = baseResponse.getData();
+                // 安全提取 appId，只有当 data 是 Long 类型时才设置
+                if (data instanceof Long) {
+                    logInfo.setAppId((Long) data);
+                } else if (data instanceof Number) {
+                    // 兼容其他数字类型
+                    logInfo.setAppId(((Number) data).longValue());
+                }
+                // 如果 data 不是数字类型（如 Boolean、String、List 等），则不设置 appId
             }
             if (result instanceof Flux<?>){
                 Flux<?> flux = (Flux<?>) result;

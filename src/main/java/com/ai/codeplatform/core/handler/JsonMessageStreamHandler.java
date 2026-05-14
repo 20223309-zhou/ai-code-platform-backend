@@ -71,13 +71,17 @@ public class JsonMessageStreamHandler {
                         // 批量入库
                         chatHistoryOriginalService.addOriginalChatMessageBatch(originalChatHistoryList);
                     }
-                    // Ai response 入库(两种情况：1. 没有进行工具调用。2. 工具调用结束之后 AI 一般还会有一句返回)
+                    // Ai response 入库（只有当有内容时才保存）
                     String aiResponseStr = aiResponseStringBuilder.toString();
-                    chatHistoryOriginalService.addOriginalChatMessage(appId, aiResponseStr, ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
+                    if (StrUtil.isNotBlank(aiResponseStr)) {
+                        chatHistoryOriginalService.addOriginalChatMessage(appId, aiResponseStr, ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
+                    }
 
-                    // 流式响应完成后，添加 AI 消息到对话历史
+                    // 流式响应完成后，添加 AI 消息到对话历史（只有当有内容时才保存）
                     String chatHistoryStr = chatHistoryStringBuilder.toString();
-                    chatHistoryService.addChatMessage(appId, chatHistoryStr, ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
+                    if (StrUtil.isNotBlank(chatHistoryStr)) {
+                        chatHistoryService.addChatMessage(appId, chatHistoryStr, ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
+                    }
                 })
                 .doOnError(error -> {
                     // 如果AI回复失败，也要记录错误消息

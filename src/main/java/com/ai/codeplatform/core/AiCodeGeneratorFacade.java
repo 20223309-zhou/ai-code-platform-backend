@@ -43,6 +43,9 @@ public class AiCodeGeneratorFacade {
 
     @Resource
     private VueProjectBuilder vueProjectBuilder;
+
+    @Resource
+    private CancelGenerationManager cancelGenerationManager;
     /**
      * 统一入口：根据类型生成并保存代码（使用 appId）
      *
@@ -114,20 +117,29 @@ public class AiCodeGeneratorFacade {
         return Flux.create(sink -> {
             tokenStream
                     .onPartialResponse((String partialResponse) -> {
+                        if (cancelGenerationManager.isCancelled(appId)) {
+                            sink.complete();
+                            return;
+                        }
                         AiResponseMessage aiResponseMessage = new AiResponseMessage(partialResponse);
                         sink.next(JSONUtil.toJsonStr(aiResponseMessage));
                     })
                     .onPartialThinking((PartialThinking partialThinking) -> {
-                        // 推理过程使用独立类型，前端可区分渲染
+                        if (cancelGenerationManager.isCancelled(appId)) {
+                            sink.complete();
+                            return;
+                        }
                         Map<String, String> thinkingMsg = Map.of(
                             "type", StreamMessageTypeEnum.THINKING.getValue(),
                             "data", partialThinking.text()
                         );
                         sink.next(JSONUtil.toJsonStr(thinkingMsg));
                     })
-                    // ★ 这是主要改动：onPartialToolExecutionRequest → onPartialToolCall
                     .onPartialToolCall((PartialToolCall partialToolCall) -> {
-                        // 从 PartialToolCall 中提取信息
+                        if (cancelGenerationManager.isCancelled(appId)) {
+                            sink.complete();
+                            return;
+                        }
                         ToolExecutionRequest toolExecutionRequest = ToolExecutionRequest.builder()
                                 .id(partialToolCall.id())
                                 .name(partialToolCall.name())
@@ -137,15 +149,25 @@ public class AiCodeGeneratorFacade {
                         sink.next(JSONUtil.toJsonStr(toolRequestMessage));
                     })
                     .onToolExecuted((ToolExecution toolExecution) -> {
+                        if (cancelGenerationManager.isCancelled(appId)) {
+                            sink.complete();
+                            return;
+                        }
                         ToolExecutedMessage toolExecutedMessage = new ToolExecutedMessage(toolExecution);
                         sink.next(JSONUtil.toJsonStr(toolExecutedMessage));
                     })
                     .onCompleteResponse((ChatResponse response) -> {
+                        cancelGenerationManager.remove(appId);
+                        if (cancelGenerationManager.isCancelled(appId)) {
+                            sink.complete();
+                            return;
+                        }
                         String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/vue_project_" + appId;
                         vueProjectBuilder.buildProject(projectPath);
                         sink.complete();
                     })
                     .onError((Throwable error) -> {
+                        cancelGenerationManager.remove(appId);
                         error.printStackTrace();
                         sink.error(error);
                     })
@@ -164,22 +186,27 @@ public class AiCodeGeneratorFacade {
      */
     private Flux<String> processCodeStream(Flux<String> codeStream, CodeGenTypeEnum codeGenType, Long appId) {
         StringBuilder codeBuilder = new StringBuilder();
-        return codeStream.doOnNext(chunk -> {
-            // 实时收集代码片段
-            codeBuilder.append(chunk);
-        }).doOnComplete(() -> {
-            // 流式返回完成后保存代码
-            try {
-                String completeCode = codeBuilder.toString();
-                // 使用执行器解析代码
-                Object parsedResult = CodeParserExecutor.executeParser(completeCode, codeGenType);
-                // 使用执行器保存代码
-                File savedDir = CodeFileSaverExecutor.executeSaver(parsedResult, codeGenType, appId);
-                log.info("保存成功，路径为：" + savedDir.getAbsolutePath());
-            } catch (Exception e) {
-                log.error("保存失败: {}", e.getMessage());
-            }
-        });
+        return codeStream
+                .takeWhile(chunk -> !cancelGenerationManager.isCancelled(appId))
+                .doOnNext(chunk -> {
+                    codeBuilder.append(chunk);
+                })
+                .doOnComplete(() -> {
+                    cancelGenerationManager.remove(appId);
+                    if (cancelGenerationManager.isCancelled(appId)) {
+                        return;
+                    }
+                    try {
+                        String completeCode = codeBuilder.toString();
+                        Object parsedResult = CodeParserExecutor.executeParser(completeCode, codeGenType);
+                        File savedDir = CodeFileSaverExecutor.executeSaver(parsedResult, codeGenType, appId);
+                        log.info("保存成功，路径为：" + savedDir.getAbsolutePath());
+                    } catch (Exception e) {
+                        log.error("保存失败: {}", e.getMessage());
+                    }
+                })
+                .doOnCancel(() -> cancelGenerationManager.remove(appId))
+                .doOnError(e -> cancelGenerationManager.remove(appId));
     }
 
 }
