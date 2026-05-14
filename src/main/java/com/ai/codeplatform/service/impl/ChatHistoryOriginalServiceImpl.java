@@ -29,12 +29,19 @@ import java.util.stream.Collectors;
  * 原始对话历史 服务层实现。
  * 为 vue 工程模式恢复对话记忆(包含工具调用信息)
  *
- * @author agx
  */
 @Service
 @Slf4j
 public class ChatHistoryOriginalServiceImpl extends ServiceImpl<ChatHistoryOriginalMapper, ChatHistoryOriginal> implements ChatHistoryOriginalService {
 
+    /**
+     * 添加AI对话消息
+     * @param appId       应用 ID
+     * @param message     消息内容
+     * @param messageType 消息类型
+     * @param userId      用户 ID
+     * @return 是否添加成功
+     */
     @Override
     public boolean addOriginalChatMessage(Long appId, String message, String messageType, Long userId) {
         // 参数校验
@@ -65,6 +72,11 @@ public class ChatHistoryOriginalServiceImpl extends ServiceImpl<ChatHistoryOrigi
         return this.save(chatHistoryOriginal);
     }
 
+    /**
+     * 批量添加AI对话消息
+     * @param chatHistoryOriginalList 批量对话消息
+     * @return 是否添加成功
+     */
     @Override
     public boolean addOriginalChatMessageBatch(List<ChatHistoryOriginal> chatHistoryOriginalList) {
         // 参数校验
@@ -104,6 +116,13 @@ public class ChatHistoryOriginalServiceImpl extends ServiceImpl<ChatHistoryOrigi
         return this.remove(queryWrapper);
     }
 
+    /**
+     * 加载原始对话历史到内存
+     * @param appId       应用 ID
+     * @param chatMemory  对话记忆
+     * @param maxCount    最大加载数量
+     * @return 加载成功的数量
+     */
     @Override
     public int loadOriginalChatHistoryToMemory(Long appId, MessageWindowChatMemory chatMemory, int maxCount) {
         try {

@@ -193,7 +193,7 @@ public class UserController {
         User user = new User();
         BeanUtils.copyProperties(userUpdateRequest, user);
         // 上传头像
-        String userAvatar = cosManager.putUserAvatar(user.getId(), file);
+        String userAvatar = cosManager.putUserImage(user.getId(), file,"avatar");
         if(userAvatar != null){
             user.setUserAvatar(userAvatar);
         }

@@ -67,9 +67,9 @@ public class CosManager {
     }
 
     /**
-     * 上传用户头像
+     * 上传用户图片
      */
-    public String putUserAvatar(Long userId, MultipartFile multipartFile) {
+    public String putUserImage(Long userId, MultipartFile multipartFile,String path) {
         if (multipartFile == null) {
             return null;
         }
@@ -103,7 +103,7 @@ public class CosManager {
         // 4.拼接上传路径
         String randomString = RandomUtil.randomString(16);
         String fileName = String.format("%s_%s.%s", userId.toString(), randomString, suffix);
-        String uploadPath = String.format("%s/%s", "avatar", fileName);
+        String uploadPath = String.format("%s/%s", path, fileName);
         // 5.创建临时文件
         File file = null;
         PutObjectRequest putObjectRequest;
@@ -114,8 +114,8 @@ public class CosManager {
                     file);
             cosClient.putObject(putObjectRequest);
         } catch (IOException e) {
-            log.info("头像上传失败", e);
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "头像上传失败");
+            log.info("图片上传失败", e);
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "图片上传失败");
         } finally {
             // 6.清理临时文件
             deleteTempFile(file);

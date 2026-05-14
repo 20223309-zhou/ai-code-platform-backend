@@ -8,8 +8,10 @@ import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.core.service.IService;
 import com.ai.codeplatform.model.entity.App;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
 
+import java.nio.channels.MulticastChannel;
 import java.util.List;
 
 /**
@@ -55,7 +57,7 @@ public interface AppService extends IService<App> {
      * @param loginUser 登录用户
      * @return 代码
      */
-    Flux<String> chatToGenCode(Long appId, String message, User loginUser);
+    Flux<String> chatToGenCode(Long appId, String message, User loginUser, MultipartFile[]  files);
 
     /**
      * 部署应用
