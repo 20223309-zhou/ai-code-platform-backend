@@ -140,6 +140,10 @@ public class JsonMessageStreamHandler {
                 chatHistoryStringBuilder.append(output);
                 return output;
             }
+            case THINKING -> {
+                // 推理过程：直接透传原始 JSON，前端自行解析渲染
+                return chunk;
+            }
             default -> {
                 log.error("不支持的消息类型: {}", typeEnum);
                 return "";

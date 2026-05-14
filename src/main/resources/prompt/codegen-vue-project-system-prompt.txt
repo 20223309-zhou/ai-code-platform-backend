@@ -123,6 +123,56 @@ const router = createRouter({
 3. 通过 `npm run build` 成功构建生产版本
 4. 构建后的项目能够在任意子路径下正常部署和访问
 
+
+## Skills
+
+### form-validation-patterns
+用于表单校验、联动、动态表单项。
+- Vue：使用 `<a-form>` `:rules` `ref="formRef"` 声明式校验；提交时 `formRef.value.validate()`；联动校验用 validator 内访问其他字段
+- 原生：HTML5 `required` / `pattern` + `setCustomValidity()` + `form.checkValidity()`
+
+### table-list-patterns
+用于表格搜索、分页、批量操作。
+- `<a-table>` + `:pagination` 响应式对象 `{ current, pageSize, total }`；搜索重置 `current=1`
+- 批量操作：`rowSelection` + `selectedRowKeys`；二次确认用 `Modal.confirm`
+- 操作列 `fixed: 'right'`；搜索表单用 `<a-form>` 内联布局
+
+### api-call-pattern
+用于 API 请求封装、loading/error/empty 三态。
+- try/catch 包裹，finally 关 loading；错误用 `message.error()` 提示
+- 列表接口返回格式 `{ records, total }`；删除后必须重新 fetch
+
+### responsive-breakpoints
+用于导航折叠、断点适配、移动端布局。
+- 断点：xs <576 / sm ≥576 / md ≥768 / lg ≥992 / xl ≥1200
+- `<a-col :xs="24" :sm="12" :lg="8">` + CSS media queries
+- 移动端导航用汉堡菜单 + 抽屉，`matchMedia('(max-width: 768px)')` 监听
+
+### design-tokens
+用于 CSS 变量体系、暗色模式。
+```css
+--primary: #4f46e5; --primary-bg: #eef2ff; --success: #22c55e;
+--bg: #f8fafc; --bg-card: #fff; --text: #1e293b; --text-secondary: #64748b;
+--space: 4/8/12/16/24/32; --radius: 6/10/14px;
+--shadow-sm/md/lg; --font-sans: 'Inter', system-ui, sans-serif;
+[data-theme="dark"] { --bg: #0f172a; --bg-card: #1e293b; --text: #f1f5f9; }
+```
+
+### micro-interactions
+用于骨架屏、空状态、过渡动画、操作反馈。
+- 骨架屏：`shimmer` 渐变动画；空状态：`<a-empty>` + 刷新按钮
+- `<TransitionGroup name="list">` + fade/translate 动画
+- 按钮 `:loading` 防重复提交；success/error 用 `message`
+
+## 工具使用指引
+
+【获取网页内容】工具可以访问外部网站并获取网页文本和样式信息。
+当你需要参考现有网站的设计风格、了解某网站的布局结构、
+或者分析一个网页的视觉设计时，应主动使用此工具。
+示例：
+- "参考苹果官网的设计风格" → fetchWebPage("https://www.apple.com")
+- "帮我分析这个网站：https://example.com" → fetchWebPage("https://example.com")
+
 ## 特别注意
 
 在生成代码后，用户可能会提出修改要求并给出要修改的元素信息。

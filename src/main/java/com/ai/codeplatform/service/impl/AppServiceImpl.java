@@ -5,6 +5,7 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
 import com.ai.codeplatform.ai.AiCodeGenTypeRoutingService;
 import com.ai.codeplatform.ai.AiCodeGenTypeRoutingServiceFactory;
 import com.ai.codeplatform.constant.AppConstant;
@@ -13,6 +14,7 @@ import com.ai.codeplatform.core.builder.VueProjectBuilder;
 import com.ai.codeplatform.core.handler.StreamHandlerExecutor;
 import com.ai.codeplatform.exception.BusinessException;
 import com.ai.codeplatform.exception.ErrorCode;
+import com.ai.codeplatform.manager.CosManager;
 import com.ai.codeplatform.model.dto.app.AppAddRequest;
 import com.ai.codeplatform.model.dto.app.AppQueryRequest;
 import com.ai.codeplatform.model.entity.User;
@@ -25,20 +27,24 @@ import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import com.ai.codeplatform.model.entity.App;
 import com.ai.codeplatform.mapper.AppMapper;
+import dev.langchain4j.data.message.Content;
+import dev.langchain4j.data.message.ImageContent;
+import dev.langchain4j.data.message.TextContent;
+import dev.langchain4j.data.message.UserMessage;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.Serializable;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -51,6 +57,9 @@ import java.util.stream.Collectors;
 public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppService {
     @Resource
     private UserService userService;
+
+    @Resource
+    private CosManager cosManager;
 
     @Resource
     private AiCodeGeneratorFacade aiCodeGeneratorFacade;
@@ -202,7 +211,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
      * @return
      */
     @Override
-    public Flux<String> chatToGenCode(Long appId, String message, User loginUser) {
+    public Flux<String> chatToGenCode(Long appId, String message, User loginUser, MultipartFile[]  files) {
         // 1. 参数校验
         if (appId == null || appId <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
@@ -225,17 +234,76 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         if (codeGenTypeEnum == null) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "不支持的代码生成类型");
         }
-        // 校验用户提示词的合法性
+        // 校验用户提示词的合法性（考虑上传的文件）
         AiCodeGenTypeRoutingService routingService = aiCodeGenTypeRoutingServiceFactory.createAiCodeGenTypeRoutingService();
-        boolean designRelated = routingService.isDesignRelated(message);
+        String intentMessage = message;
+        if (files != null && files.length > 0) {
+            boolean hasImage = false, hasText = false;
+            for (MultipartFile f : files) {
+                if (f.getSize() > 1024 * 1024 * 5) {
+                    throw new BusinessException(ErrorCode.OPERATION_ERROR, "文件大小不能超过 5MB");
+                }
+                String ct = f.getContentType();
+                if (ct != null && ct.startsWith("image/")) hasImage = true;
+                else if (ct != null && ct.contains("text")) hasText = true;
+            }
+            if (hasImage && hasText) intentMessage += " (用户上传了参考图片和需求文档)";
+            else if (hasImage) intentMessage += " (用户上传了参考图片)";
+            else if (hasText) intentMessage += " (用户上传了需求文档)";
+        }
+        boolean designRelated = routingService.isDesignRelated(intentMessage);
         if (!designRelated){
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "请提供具体的网页修改需求或功能描述。");
         }
+
+        // 1. 构建用户消息内容列表
+        List<Content> contents = new ArrayList<>();
+        TextContent textContent = new TextContent(message);
+        contents.add(textContent);
+        // 构建入库的用户会话历史
+        List<Map<String, Object>> serializableContents = new ArrayList<>();
+        Map<String, Object> textMap = new HashMap<>();
+        textMap.put("type", "text");
+        textMap.put("text", textContent.text());
+        serializableContents.add(textMap);
+        if (files != null) {
+            for (MultipartFile file : files) {
+                String contentType = file.getContentType();
+                Map<String, Object> contentMap = new HashMap<>();
+                if (contentType != null && contentType.startsWith("image/")) {
+                    // 图片 → ImageContent
+                    String imageUrl = cosManager.putUserImage(loginUser.getId(), file, "chat_photo/" + loginUser.getId());
+                    String imageSuffix = imageUrl.substring(imageUrl.lastIndexOf(".") + 1);
+                    ImageContent imageContent = new ImageContent(imageUrl);
+                    contents.add(imageContent);
+                    contentMap.put("type", "image");
+                    contentMap.put("mimeType", "image/" + imageSuffix);
+                    contentMap.put("url", imageUrl);
+                } else if (contentType != null && contentType.contains("text")) {
+                    // 文本文件 → 读取内容 → TextContent
+                    String text = null;
+                    try {
+                        text = new String(file.getBytes(), StandardCharsets.UTF_8);
+                    } catch (IOException e) {
+                        throw new BusinessException(ErrorCode.SYSTEM_ERROR, "文本文件转换异常");
+                    }
+                    contents.add(new TextContent("=== 上传的文件内容 ===\n" + text));
+                    contentMap.put("type", "text");
+                    contentMap.put("text", "=== 上传的文件内容 ===\n" + text);
+                }
+                serializableContents.add(contentMap);
+            }
+        }
+        // 2. 构造多模态 UserMessage
+        UserMessage userMessage = UserMessage.from(contents);
+        // 4. 序列化为 JSON 字符串
+        String messageStr = JSONUtil.toJsonStr(serializableContents);
+
         // 5. 通过校验后，添加用户消息到对话历史
-        chatHistoryService.addChatMessage(appId, message, ChatHistoryMessageTypeEnum.USER.getValue(), loginUser.getId());
-        chatHistoryOriginalService.addOriginalChatMessage(appId, message, ChatHistoryMessageTypeEnum.USER.getValue(), loginUser.getId());
+        chatHistoryService.addChatMessage(appId, messageStr, ChatHistoryMessageTypeEnum.USER.getValue(), loginUser.getId());
+        chatHistoryOriginalService.addOriginalChatMessage(appId, messageStr, ChatHistoryMessageTypeEnum.USER.getValue(), loginUser.getId());
         // 6. 调用 AI 生成代码（流式）
-        Flux<String> codeStream = aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, appId);
+        Flux<String> codeStream = aiCodeGeneratorFacade.generateAndSaveCodeStream(userMessage, codeGenTypeEnum, appId);
         // 7. 收集 AI 响应内容并在完成后记录到对话历史
         return streamHandlerExecutor.doExecute(codeStream, chatHistoryService,chatHistoryOriginalService,appId, loginUser, codeGenTypeEnum);
 

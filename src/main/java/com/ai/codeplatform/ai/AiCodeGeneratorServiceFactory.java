@@ -3,6 +3,7 @@ package com.ai.codeplatform.ai;
 import com.ai.codeplatform.ai.guardrail.PromptSafetyInputGuardrail;
 import com.ai.codeplatform.ai.tools.FileWriteTool;
 import com.ai.codeplatform.ai.tools.ToolManager;
+import com.ai.codeplatform.ai.tools.WebFetchTool;
 import com.ai.codeplatform.exception.BusinessException;
 import com.ai.codeplatform.exception.ErrorCode;
 import com.ai.codeplatform.model.enums.CodeGenTypeEnum;
@@ -82,7 +83,7 @@ public class AiCodeGeneratorServiceFactory {
                 .maxMessages(800000)
                 .build();
         // 从数据库加载历史对话到记忆中
-        chatHistoryService.loadChatHistoryToMemory(appId, chatMemory, 20);
+        chatHistoryOriginalService.loadOriginalChatHistoryToMemory(appId, chatMemory, 20);
         // 根据代码生成类型选择不同的模型配置
         return switch (codeGenType) {
             case VUE_PROJECT -> {
@@ -105,6 +106,7 @@ public class AiCodeGeneratorServiceFactory {
                         .chatModel(chatModel)
                         .streamingChatModel(openAiStreamingChatModel)
                         .chatMemory(chatMemory)
+                        .tools(new WebFetchTool())
                         .inputGuardrails(new PromptSafetyInputGuardrail())// 添加输入护轨
                         .build();
             }

@@ -8,6 +8,7 @@ import com.ai.codeplatform.ai.model.MultiFileCodeResult;
 import com.ai.codeplatform.ai.model.message.AiResponseMessage;
 import com.ai.codeplatform.ai.model.message.ToolExecutedMessage;
 import com.ai.codeplatform.ai.model.message.ToolRequestMessage;
+import com.ai.codeplatform.ai.model.message.StreamMessageTypeEnum;
 import com.ai.codeplatform.constant.AppConstant;
 import com.ai.codeplatform.core.builder.VueProjectBuilder;
 import com.ai.codeplatform.core.parser.CodeParserExecutor;
@@ -16,7 +17,9 @@ import com.ai.codeplatform.exception.BusinessException;
 import com.ai.codeplatform.exception.ErrorCode;
 import com.ai.codeplatform.model.enums.CodeGenTypeEnum;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
+import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.chat.response.PartialThinking;
 import dev.langchain4j.model.chat.response.PartialToolCall;
 import dev.langchain4j.service.TokenStream;
 import dev.langchain4j.service.tool.ToolExecution;
@@ -26,6 +29,7 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
 import java.io.File;
+import java.util.Map;
 
 /**
  * AI 代码生成外观类，组合生成和保存功能
@@ -75,7 +79,7 @@ public class AiCodeGeneratorFacade {
      * @param codeGenTypeEnum 生成类型
      * @param appId           应用 ID
      */
-    public Flux<String> generateAndSaveCodeStream(String userMessage, CodeGenTypeEnum codeGenTypeEnum, Long appId) {
+    public Flux<String> generateAndSaveCodeStream(UserMessage userMessage, CodeGenTypeEnum codeGenTypeEnum, Long appId) {
         if (codeGenTypeEnum == null) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "生成类型为空");
         }
@@ -112,6 +116,14 @@ public class AiCodeGeneratorFacade {
                     .onPartialResponse((String partialResponse) -> {
                         AiResponseMessage aiResponseMessage = new AiResponseMessage(partialResponse);
                         sink.next(JSONUtil.toJsonStr(aiResponseMessage));
+                    })
+                    .onPartialThinking((PartialThinking partialThinking) -> {
+                        // 推理过程使用独立类型，前端可区分渲染
+                        Map<String, String> thinkingMsg = Map.of(
+                            "type", StreamMessageTypeEnum.THINKING.getValue(),
+                            "data", partialThinking.text()
+                        );
+                        sink.next(JSONUtil.toJsonStr(thinkingMsg));
                     })
                     // ★ 这是主要改动：onPartialToolExecutionRequest → onPartialToolCall
                     .onPartialToolCall((PartialToolCall partialToolCall) -> {

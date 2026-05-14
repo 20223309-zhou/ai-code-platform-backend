@@ -32,6 +32,7 @@ import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import com.ai.codeplatform.model.entity.App;
+import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -388,9 +389,11 @@ public class AppController {
      * @return 生成的代码
      */
     @LogRecord(description = "开始生成代码")
-    @GetMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @PostMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> chatToGenCode(@RequestParam Long appId,
                                                        @RequestParam String message,
+                                                       @RequestPart(value = "files",required = false)
+                                                           MultipartFile[] files,
                                                        HttpServletRequest request) {
         // 参数校验
         if (appId == null || appId <= 0) {
@@ -402,7 +405,7 @@ public class AppController {
         // 获取当前登录用户
         User loginUser = userService.getLoginUser(request);
         // 调用服务生成代码（流式）
-        Flux<String> contentFlux = appService.chatToGenCode(appId, message, loginUser);
+        Flux<String> contentFlux = appService.chatToGenCode(appId, message, loginUser,files);
         // 转换为 ServerSentEvent 格式
         return contentFlux
                 .map(chunk -> {

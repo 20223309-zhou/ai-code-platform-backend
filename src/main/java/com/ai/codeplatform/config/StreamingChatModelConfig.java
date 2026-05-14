@@ -35,6 +35,9 @@ public class StreamingChatModelConfig {
     @Scope("prototype")
     public StreamingChatModel streamingChatModelPrototype() {
         return OpenAiStreamingChatModel.builder()
+                .returnThinking( true)
+                .sendThinking( true)
+                .accumulateToolCallId( false)
                 .apiKey(apiKey)
                 .baseUrl(baseUrl)
                 .timeout(timeout)
