@@ -26,6 +26,7 @@ import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.helpers.CheckReturnValue;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.MediaType;
@@ -172,6 +173,7 @@ public class AppController {
      */
     @LogRecord(description = "用户删除应用")
     @CacheEvict(value = "good_app_page", allEntries = true)
+    @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
     @PostMapping("/delete")
     public BaseResponse<Boolean> deleteApp(@RequestBody DeleteRequest deleteRequest, HttpServletRequest request) {
         if (deleteRequest == null || deleteRequest.getId() <= 0) {
@@ -224,6 +226,7 @@ public class AppController {
      * @param request         请求
      * @return 应用列表
      */
+    @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
     @PostMapping("/my/list/page/vo")
     public BaseResponse<Page<AppVO>> listMyAppVOByPage(@RequestBody AppQueryRequest appQueryRequest, HttpServletRequest request) {
         if (appQueryRequest == null) {
@@ -392,6 +395,7 @@ public class AppController {
      * @param request 请求
      * @return 生成的代码
      */
+    @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
     @LogRecord(description = "开始生成代码")
     @PostMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> chatToGenCode(@RequestParam Long appId,
@@ -430,18 +434,19 @@ public class AppController {
     }
 
     /**
-     * 取消代码生成
-     *
-     * @param appId 应用ID
-     * @return 取消结果
+     * 使用app模板（精选应用）
+     * @param templateId 模板ID
+     * @return 创建结果
      */
-    @PostMapping("/chat/cancel")
-    public BaseResponse<Boolean> cancelGeneration(@RequestParam Long appId) {
-        if (appId == null || appId <= 0) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "应用ID无效");
+    @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
+    @PostMapping("/template/fork")
+    public BaseResponse<Long> forkTemplate(@RequestParam Long templateId, HttpServletRequest request) {
+        if (templateId == null || templateId <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
-        cancelGenerationManager.cancel(appId);
-        return ResultUtils.success(true);
+        User loginUser = userService.getLoginUser(request);
+        Long appId = appService.forkTemplate(templateId, loginUser);
+        return ResultUtils.success(appId);
     }
 
     /**
@@ -451,6 +456,7 @@ public class AppController {
      * @param request          请求
      * @return 部署 URL
      */
+    @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
     @PostMapping("/deploy")
     public BaseResponse<String> deployApp(@RequestBody AppDeployRequest appDeployRequest, HttpServletRequest request) {
         if (appDeployRequest == null) {
@@ -501,4 +507,6 @@ public class AppController {
             }
         }
     }
-}
+
+    }
+

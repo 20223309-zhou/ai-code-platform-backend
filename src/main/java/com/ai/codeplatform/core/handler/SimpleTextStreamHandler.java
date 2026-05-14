@@ -2,6 +2,7 @@ package com.ai.codeplatform.core.handler;
 
 import com.ai.codeplatform.model.entity.User;
 import com.ai.codeplatform.model.enums.ChatHistoryMessageTypeEnum;
+import com.ai.codeplatform.service.ChatHistoryOriginalService;
 import com.ai.codeplatform.service.ChatHistoryService;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
@@ -25,6 +26,7 @@ public class SimpleTextStreamHandler {
      */
     public Flux<String> handle(Flux<String> originFlux,
                                ChatHistoryService chatHistoryService,
+                               ChatHistoryOriginalService chatHistoryOriginalService,
                                long appId, User loginUser) {
         StringBuilder aiResponseBuilder = new StringBuilder();
         return originFlux
@@ -37,11 +39,13 @@ public class SimpleTextStreamHandler {
                     // 流式响应完成后，添加AI消息到对话历史
                     String aiResponse = aiResponseBuilder.toString();
                     chatHistoryService.addChatMessage(appId, aiResponse, ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
+                    chatHistoryOriginalService.addOriginalChatMessage(appId, aiResponse, ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
                 })
                 .doOnError(error -> {
                     // 如果AI回复失败，也要记录错误消息
                     String errorMessage = "AI回复失败: " + error.getMessage();
                     chatHistoryService.addChatMessage(appId, errorMessage, ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
+                    chatHistoryOriginalService.addOriginalChatMessage(appId, errorMessage, ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
                 });
     }
 }

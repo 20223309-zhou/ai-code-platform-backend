@@ -3,6 +3,7 @@ package com.ai.codeplatform.service.impl;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.io.FileUtil;
+import cn.hutool.core.io.IORuntimeException;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
@@ -18,6 +19,8 @@ import com.ai.codeplatform.exception.ErrorCode;
 import com.ai.codeplatform.manager.CosManager;
 import com.ai.codeplatform.model.dto.app.AppAddRequest;
 import com.ai.codeplatform.model.dto.app.AppQueryRequest;
+import com.ai.codeplatform.model.entity.ChatHistory;
+import com.ai.codeplatform.model.entity.ChatHistoryOriginal;
 import com.ai.codeplatform.model.entity.User;
 import com.ai.codeplatform.model.enums.ChatHistoryMessageTypeEnum;
 import com.ai.codeplatform.model.enums.CodeGenTypeEnum;
@@ -47,6 +50,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
+
+import static com.ai.codeplatform.constant.AppConstant.CODE_OUTPUT_ROOT_DIR;
 
 /**
  * 应用 服务层实现。
@@ -123,87 +128,6 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         }
         log.info("应用创建成功，ID: {}, 类型: {}", app.getId(), selectedCodeGenType.getValue());
         return app;
-    }
-
-    /**
-     * 获取应用视图对象,并封装用户脱敏信息
-     *
-     * @param app
-     * @return
-     */
-    @Override
-    public AppVO getAppVO(App app) {
-        if (app == null) {
-            return null;
-        }
-        AppVO appVO = new AppVO();
-        BeanUtil.copyProperties(app, appVO);
-        // 关联查询用户信息
-        Long userId = app.getUserId();
-        if (userId != null) {
-            User user = userService.getById(userId);
-            UserVO userVO = userService.getUserVO(user);
-            appVO.setUser(userVO);
-        }
-        return appVO;
-    }
-
-    /**
-     * 获取查询条件
-     *
-     * @param appQueryRequest
-     * @return
-     */
-    @Override
-    public QueryWrapper getQueryWrapper(AppQueryRequest appQueryRequest) {
-        if (appQueryRequest == null) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "请求参数为空");
-        }
-        Long id = appQueryRequest.getId();
-        String appName = appQueryRequest.getAppName();
-        String cover = appQueryRequest.getCover();
-        String initPrompt = appQueryRequest.getInitPrompt();
-        String codeGenType = appQueryRequest.getCodeGenType();
-        String deployKey = appQueryRequest.getDeployKey();
-        Integer priority = appQueryRequest.getPriority();
-        Long userId = appQueryRequest.getUserId();
-        String sortField = appQueryRequest.getSortField();
-        String sortOrder = appQueryRequest.getSortOrder();
-        return QueryWrapper.create()
-                .eq("id", id)
-                .like("appName", appName)
-                .like("cover", cover)
-                .like("initPrompt", initPrompt)
-                .eq("codeGenType", codeGenType)
-                .eq("deployKey", deployKey)
-                .eq("priority", priority)
-                .eq("userId", userId)
-                .orderBy(sortField, "ascend".equals(sortOrder));
-    }
-
-    /**
-     * 获取应用视图对象列表
-     *
-     * @param appList
-     * @return
-     */
-    @Override
-    public List<AppVO> getAppVOList(List<App> appList) {
-        if (CollUtil.isEmpty(appList)) {
-            return new ArrayList<>();
-        }
-        // 批量获取用户信息，避免 N+1 查询问题
-        Set<Long> userIds = appList.stream()
-                .map(App::getUserId)
-                .collect(Collectors.toSet());
-        Map<Long, UserVO> userVOMap = userService.listByIds(userIds).stream()
-                .collect(Collectors.toMap(User::getId, userService::getUserVO));
-        return appList.stream().map(app -> {
-            AppVO appVO = getAppVO(app);
-            UserVO userVO = userVOMap.get(app.getUserId());
-            appVO.setUser(userVO);
-            return appVO;
-        }).collect(Collectors.toList());
     }
 
     /**
@@ -313,7 +237,86 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         // 8. 收集 AI 响应内容并在完成后记录到对话历史
         return streamHandlerExecutor.doExecute(codeStream, chatHistoryService,chatHistoryOriginalService,appId, loginUser, codeGenTypeEnum)
                 .doFinally(signalType -> cancelGenerationManager.remove(appId));
+    }
+    /**
+     * 获取应用视图对象,并封装用户脱敏信息
+     *
+     * @param app
+     * @return
+     */
+    @Override
+    public AppVO getAppVO(App app) {
+        if (app == null) {
+            return null;
+        }
+        AppVO appVO = new AppVO();
+        BeanUtil.copyProperties(app, appVO);
+        // 关联查询用户信息
+        Long userId = app.getUserId();
+        if (userId != null) {
+            User user = userService.getById(userId);
+            UserVO userVO = userService.getUserVO(user);
+            appVO.setUser(userVO);
+        }
+        return appVO;
+    }
 
+    /**
+     * 获取查询条件
+     *
+     * @param appQueryRequest
+     * @return
+     */
+    @Override
+    public QueryWrapper getQueryWrapper(AppQueryRequest appQueryRequest) {
+        if (appQueryRequest == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "请求参数为空");
+        }
+        Long id = appQueryRequest.getId();
+        String appName = appQueryRequest.getAppName();
+        String cover = appQueryRequest.getCover();
+        String initPrompt = appQueryRequest.getInitPrompt();
+        String codeGenType = appQueryRequest.getCodeGenType();
+        String deployKey = appQueryRequest.getDeployKey();
+        Integer priority = appQueryRequest.getPriority();
+        Long userId = appQueryRequest.getUserId();
+        String sortField = appQueryRequest.getSortField();
+        String sortOrder = appQueryRequest.getSortOrder();
+        return QueryWrapper.create()
+                .eq("id", id)
+                .like("appName", appName)
+                .like("cover", cover)
+                .like("initPrompt", initPrompt)
+                .eq("codeGenType", codeGenType)
+                .eq("deployKey", deployKey)
+                .eq("priority", priority)
+                .eq("userId", userId)
+                .orderBy(sortField, "ascend".equals(sortOrder));
+    }
+
+    /**
+     * 获取应用视图对象列表
+     *
+     * @param appList
+     * @return
+     */
+    @Override
+    public List<AppVO> getAppVOList(List<App> appList) {
+        if (CollUtil.isEmpty(appList)) {
+            return new ArrayList<>();
+        }
+        // 批量获取用户信息，避免 N+1 查询问题
+        Set<Long> userIds = appList.stream()
+                .map(App::getUserId)
+                .collect(Collectors.toSet());
+        Map<Long, UserVO> userVOMap = userService.listByIds(userIds).stream()
+                .collect(Collectors.toMap(User::getId, userService::getUserVO));
+        return appList.stream().map(app -> {
+            AppVO appVO = getAppVO(app);
+            UserVO userVO = userVOMap.get(app.getUserId());
+            appVO.setUser(userVO);
+            return appVO;
+        }).collect(Collectors.toList());
     }
 
     /**
@@ -350,7 +353,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         // 5. 获取代码生成类型，构建源目录路径
         String codeGenType = app.getCodeGenType();
         String sourceDirName = codeGenType + "_" + appId;
-        String sourceDirPath = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + sourceDirName;
+        String sourceDirPath = CODE_OUTPUT_ROOT_DIR + File.separator + sourceDirName;
         // 6. 检查源目录是否存在
         File sourceDir = new File(sourceDirPath);
         if (!sourceDir.exists() || !sourceDir.isDirectory()) {
@@ -396,6 +399,59 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         return appDeployUrl;
     }
 
+
+    /**
+     * 使用app模板
+     * @param templateId 模板ID
+     * @return 新应用ID
+     */
+    @Override
+    public Long forkTemplate(Long templateId, User loginUser) {
+        App templateApp = getById(templateId);
+        QueryWrapper queryWrapper = QueryWrapper.create().eq(ChatHistoryOriginal::getAppId, templateId);
+        List<ChatHistoryOriginal> chatHistoryOriginals = chatHistoryOriginalService.list(queryWrapper);
+        if (chatHistoryOriginals.isEmpty()){
+            log.error("模板没有会话历史，appId：{}",templateApp);
+        }
+        if (templateApp == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "模板不存在");
+        }
+        if (templateApp.getPriority() != 99) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "该应用不是模板，无法使用");
+        }
+        App app = new App();
+        BeanUtil.copyProperties(templateApp, app);
+        app.setId(null);
+        app.setUserId(loginUser.getId());
+        app.setCover(null);
+        app.setEditTime(LocalDateTime.now());
+        app.setCreateTime(LocalDateTime.now());
+        app.setDeployKey(null);
+        app.setDeployedTime(null);
+        app.setPriority(0);
+        boolean isSuccess = save(app);
+        if (!isSuccess){
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "模板使用失败");
+        }
+        for (ChatHistoryOriginal h : chatHistoryOriginals) {
+            h.setId(null);
+            h.setAppId(app.getId());
+            h.setUserId(loginUser.getId());
+            h.setCreateTime(LocalDateTime.now());
+            h.setUpdateTime(LocalDateTime.now());
+        }
+        // 批量复制会话历史
+        chatHistoryOriginalService.saveBatch(chatHistoryOriginals);
+        try {
+            FileUtil.copyContent(new File(CODE_OUTPUT_ROOT_DIR +
+                    File.separator + templateApp.getCodeGenType() + "_" + templateApp.getId()),
+                    new File(CODE_OUTPUT_ROOT_DIR +
+                            File.separator + app.getCodeGenType() + "_" + app.getId()), true);
+        } catch (IORuntimeException e) {
+            log.error("模板文件复制失败：{}", e.getMessage());
+        }
+        return app.getId();
+    }
 
     /**
      * 异步生成应用截图并更新封面

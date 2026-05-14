@@ -73,4 +73,11 @@ public interface AppService extends IService<App> {
      * @param appUrl 应用url
      */
     void generateAppScreenshotAsync(Long appId, String appUrl);
+
+    /**
+     * 创建应用模板
+     * @param templateId 模板id
+     * @return 应用id
+     */
+    Long forkTemplate(Long templateId, User loginUser);
 }
