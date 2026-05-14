@@ -82,7 +82,11 @@ public class GlobalExceptionHandler {
                 response.getWriter().flush();
                 // 表示已处理SSE请求
                 return true;
-            } catch (IOException ioException) {
+            }catch (IllegalStateException e) {
+                // 响应已提交，无法写入
+                log.warn("SSE响应已提交，无法发送错误信息: {}", errorMessage);
+                return true;
+            }catch (IOException ioException) {
                 log.error("Failed to write SSE error response", ioException);
                 // 即使写入失败，也表示这是SSE请求
                 return true;

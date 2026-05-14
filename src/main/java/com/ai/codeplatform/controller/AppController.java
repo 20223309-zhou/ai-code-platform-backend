@@ -13,6 +13,7 @@ import com.ai.codeplatform.constant.AppConstant;
 import com.ai.codeplatform.constant.UserConstant;
 import com.ai.codeplatform.exception.BusinessException;
 import com.ai.codeplatform.exception.ErrorCode;
+import com.ai.codeplatform.core.CancelGenerationManager;
 import com.ai.codeplatform.model.dto.app.*;
 import com.ai.codeplatform.model.entity.User;
 import com.ai.codeplatform.model.vo.AppVO;
@@ -59,6 +60,9 @@ public class AppController {
 
     @Resource
     private ProjectDownloadService projectDownloadService;
+
+    @Resource
+    private CancelGenerationManager cancelGenerationManager;
 
     /**
      * 下载应用代码
@@ -423,6 +427,21 @@ public class AppController {
                                 .data("")
                                 .build()
                 ));
+    }
+
+    /**
+     * 取消代码生成
+     *
+     * @param appId 应用ID
+     * @return 取消结果
+     */
+    @PostMapping("/chat/cancel")
+    public BaseResponse<Boolean> cancelGeneration(@RequestParam Long appId) {
+        if (appId == null || appId <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "应用ID无效");
+        }
+        cancelGenerationManager.cancel(appId);
+        return ResultUtils.success(true);
     }
 
     /**
