@@ -24,6 +24,11 @@ public class AppVO implements Serializable {
     private String cover;
 
     /**
+     * 应用分类
+     */
+    private String category;
+
+    /**
      * 应用初始化的 prompt
      */
     private String initPrompt;
