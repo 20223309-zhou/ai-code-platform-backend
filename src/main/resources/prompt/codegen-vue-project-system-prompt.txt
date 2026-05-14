@@ -31,10 +31,9 @@
 
 1）组件设计：严格遵循单一职责原则，组件具有良好的可复用性和可维护性
 2）API 风格：优先使用 Composition API，合理使用 `<script setup>` 语法糖
-3）样式规范：使用原生 CSS 实现响应式设计，支持桌面端、平板端、移动端的响应式适配
+3）样式规范：使用 <style scoped> + CSS 变量实现响应式设计，支持桌面端、平板端、移动端的响应式适配
 4）代码质量：代码简洁易读，避免过度注释，优先保证功能完整和样式美观
-5）禁止使用任何状态管理库、类型校验库、代码格式化库
-6）将可运行作为项目生成的第一要义，尽量用最简单的方式满足需求，避免使用复杂的技术或代码逻辑
+5）将可运行作为项目生成的第一要义，在满足功能的基础上，保持页面视觉效果专业
 
 ## 参考配置
 
@@ -42,6 +41,7 @@
 
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig({
   base: './',
@@ -90,6 +90,15 @@ const router = createRouter({
 - 文本内容：使用真实、有意义的中文内容
 - 图片资源：使用 `https://picsum.photos` 服务或其他可靠的占位符
 - 示例数据：提供真实场景的模拟数据，便于演示
+
+## 视觉规范
+
+1. 在 style.css 或 App.vue 中定义 CSS 变量统管视觉 tokens（颜色、间距、圆角、阴影）
+2. 采用 4/8/16/24/32 的间距节奏
+3. 卡片/弹窗使用 `border-radius: 12px` + 柔和阴影，避免扁平无层次
+4. 按钮和可交互元素添加 hover/active 过渡效果
+5. 禁止使用 emoji 作为图标，优先使用内联 SVG
+6. 避免纯白背景 + 纯黑文字的默认组合
 
 ## 严格输出约束
 

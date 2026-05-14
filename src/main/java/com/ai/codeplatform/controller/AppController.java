@@ -25,6 +25,7 @@ import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
@@ -165,6 +166,7 @@ public class AppController {
      * @return 删除结果
      */
     @LogRecord(description = "用户删除应用")
+    @CacheEvict(value = "good_app_page", allEntries = true)
     @PostMapping("/delete")
     public BaseResponse<Boolean> deleteApp(@RequestBody DeleteRequest deleteRequest, HttpServletRequest request) {
         if (deleteRequest == null || deleteRequest.getId() <= 0) {
@@ -280,6 +282,7 @@ public class AppController {
      * @param deleteRequest 删除请求
      * @return 删除结果
      */
+    @CacheEvict(value = "good_app_page", allEntries = true)
     @LogRecord(description = "管理员删除应用")
     @PostMapping("/admin/delete")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
@@ -308,6 +311,7 @@ public class AppController {
      * @param appAdminUpdateRequest 更新请求
      * @return 更新结果
      */
+    @CacheEvict(value = "good_app_page", allEntries = true)
     @PostMapping("/admin/update")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public BaseResponse<Boolean> updateAppByAdmin(@RequestBody AppAdminUpdateRequest appAdminUpdateRequest) {
