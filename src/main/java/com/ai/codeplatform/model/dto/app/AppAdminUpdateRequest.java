@@ -23,6 +23,11 @@ public class AppAdminUpdateRequest implements Serializable {
     private String cover;
 
     /**
+     * 应用分类
+     */
+    private String category;
+
+    /**
      * 优先级
      */
     private Integer priority;
