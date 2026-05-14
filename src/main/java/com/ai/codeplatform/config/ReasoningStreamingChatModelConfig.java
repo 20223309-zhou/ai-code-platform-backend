@@ -1,6 +1,8 @@
 package com.ai.codeplatform.config;
 
+import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -32,7 +34,11 @@ public class ReasoningStreamingChatModelConfig {
     @Bean
     @Scope("prototype")
     public StreamingChatModel reasoningStreamingChatModelPrototype() {
+
         return OpenAiStreamingChatModel.builder()
+                .accumulateToolCallId(false)
+                .sendThinking(true)
+                .returnThinking(true)
                 .apiKey(apiKey)
                 .baseUrl(baseUrl)
                 .modelName(modelName)

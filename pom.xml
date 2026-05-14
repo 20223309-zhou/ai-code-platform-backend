@@ -90,23 +90,23 @@
             <groupId>com.zaxxer</groupId>
             <artifactId>HikariCP</artifactId>
         </dependency>
-        <!-- langchain4j -->
+        <!-- langchain4j 高级 AI Service API -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j</artifactId>
-            <version>1.1.0</version>
+            <version>1.11.7</version>
         </dependency>
         <!-- spring langchain4j 依赖支持 -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-open-ai-spring-boot-starter</artifactId>
-            <version>1.1.0-beta7</version>
+            <version>1.11.7-beta19</version>
         </dependency>
         <!-- langchain4j reactor 支持 -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-reactor</artifactId>
-            <version>1.1.0-beta7</version>
+            <version>1.11.7-beta19</version>
         </dependency>
         <!-- langchain4j整合 redis -->
         <dependency>
@@ -160,7 +160,6 @@
             <artifactId>redisson</artifactId>
             <version>3.50.0</version>
         </dependency>
-
     </dependencies>
 
     <build>

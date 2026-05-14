@@ -15,7 +15,9 @@ import com.ai.codeplatform.core.saver.CodeFileSaverExecutor;
 import com.ai.codeplatform.exception.BusinessException;
 import com.ai.codeplatform.exception.ErrorCode;
 import com.ai.codeplatform.model.enums.CodeGenTypeEnum;
+import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.chat.response.PartialToolCall;
 import dev.langchain4j.service.TokenStream;
 import dev.langchain4j.service.tool.ToolExecution;
 import jakarta.annotation.Resource;
@@ -106,11 +108,19 @@ public class AiCodeGeneratorFacade {
      */
     private Flux<String> processTokenStream(TokenStream tokenStream, Long appId) {
         return Flux.create(sink -> {
-            tokenStream.onPartialResponse((String partialResponse) -> {
+            tokenStream
+                    .onPartialResponse((String partialResponse) -> {
                         AiResponseMessage aiResponseMessage = new AiResponseMessage(partialResponse);
                         sink.next(JSONUtil.toJsonStr(aiResponseMessage));
                     })
-                    .onPartialToolExecutionRequest((index, toolExecutionRequest) -> {
+                    // ★ 这是主要改动：onPartialToolExecutionRequest → onPartialToolCall
+                    .onPartialToolCall((PartialToolCall partialToolCall) -> {
+                        // 从 PartialToolCall 中提取信息
+                        ToolExecutionRequest toolExecutionRequest = ToolExecutionRequest.builder()
+                                .id(partialToolCall.id())
+                                .name(partialToolCall.name())
+                                .arguments(partialToolCall.partialArguments())
+                                .build();
                         ToolRequestMessage toolRequestMessage = new ToolRequestMessage(toolExecutionRequest);
                         sink.next(JSONUtil.toJsonStr(toolRequestMessage));
                     })
@@ -119,7 +129,6 @@ public class AiCodeGeneratorFacade {
                         sink.next(JSONUtil.toJsonStr(toolExecutedMessage));
                     })
                     .onCompleteResponse((ChatResponse response) -> {
-                        // 同步构建 Vue 项目
                         String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/vue_project_" + appId;
                         vueProjectBuilder.buildProject(projectPath);
                         sink.complete();
