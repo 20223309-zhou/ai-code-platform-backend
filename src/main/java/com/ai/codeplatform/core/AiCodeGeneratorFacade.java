@@ -15,6 +15,7 @@ import com.ai.codeplatform.core.parser.CodeParserExecutor;
 import com.ai.codeplatform.core.saver.CodeFileSaverExecutor;
 import com.ai.codeplatform.exception.BusinessException;
 import com.ai.codeplatform.exception.ErrorCode;
+import com.ai.codeplatform.manager.CancelGenerationManager;
 import com.ai.codeplatform.model.enums.CodeGenTypeEnum;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.UserMessage;

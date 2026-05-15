@@ -13,7 +13,7 @@ import com.ai.codeplatform.constant.AppConstant;
 import com.ai.codeplatform.constant.UserConstant;
 import com.ai.codeplatform.exception.BusinessException;
 import com.ai.codeplatform.exception.ErrorCode;
-import com.ai.codeplatform.core.CancelGenerationManager;
+import com.ai.codeplatform.manager.CancelGenerationManager;
 import com.ai.codeplatform.model.dto.app.*;
 import com.ai.codeplatform.model.entity.User;
 import com.ai.codeplatform.model.vo.AppVO;
@@ -26,12 +26,10 @@ import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.helpers.CheckReturnValue;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import com.ai.codeplatform.model.entity.App;
 import org.springframework.web.multipart.MultipartFile;
@@ -126,6 +124,76 @@ public class AppController {
         }
         App app = appService.createApp(appAddRequest, request, initPrompt);
         return ResultUtils.success(app.getId());
+    }
+
+    /**
+     * 聊天生成代码
+     *
+     * @param appId   应用ID
+     * @param message 用户消息
+     * @param request 请求
+     * @return 生成的代码
+     */
+    @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
+    @LogRecord(description = "开始生成代码")
+    @PostMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<String>> chatToGenCode(@RequestParam Long appId,
+                                                       @RequestParam String message,
+                                                       @RequestPart(value = "files",required = false)
+                                                       MultipartFile[] files,
+                                                       HttpServletRequest request) {
+        // 参数校验
+        if (appId == null || appId <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "应用ID无效");
+        }
+        if (StrUtil.isBlank(message)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户消息不能为空");
+        }
+        // 获取当前登录用户
+        User loginUser = userService.getLoginUser(request);
+        // 调用服务生成代码（流式）
+        Flux<String> contentFlux = appService.chatToGenCode(appId, message, loginUser,files);
+        // 转换为 ServerSentEvent 格式
+        return contentFlux
+                .map(chunk -> {
+                    // 将内容包装成JSON对象
+                    Map<String, String> wrapper = Map.of("d", chunk);
+                    String jsonData = JSONUtil.toJsonStr(wrapper);
+                    return ServerSentEvent.<String>builder()
+                            .data(jsonData)
+                            .build();
+                })
+                .concatWith(Mono.just(
+                        // 发送结束事件
+                        ServerSentEvent.<String>builder()
+                                .event("done")
+                                .data("")
+                                .build()
+                ));
+    }
+
+    /**
+     * 取消代码生成
+     * @param appId   应用ID
+     * @param request 请求
+     * @return 取消结果
+     */
+    @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
+    @PostMapping("/cancel/{appId}")
+    public BaseResponse<Boolean> cancel(@PathVariable Long appId,HttpServletRequest  request) {
+        // 1. 校验应用是否存在
+        App app = appService.getById(appId);
+        if (app == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        }
+        // 2. 校验当前用户是否是应用创建者
+        User loginUser = userService.getLoginUser(request);
+        if (!app.getUserId().equals(loginUser.getId())) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
+        }
+        // 3. 取消代码生成
+        cancelGenerationManager.cancel(appId);
+        return ResultUtils.success(true);
     }
 
 
@@ -385,52 +453,6 @@ public class AppController {
         }
         // 获取封装类
         return ResultUtils.success(appService.getAppVO(app));
-    }
-
-    /**
-     * 聊天生成代码
-     *
-     * @param appId   应用ID
-     * @param message 用户消息
-     * @param request 请求
-     * @return 生成的代码
-     */
-    @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
-    @LogRecord(description = "开始生成代码")
-    @PostMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<ServerSentEvent<String>> chatToGenCode(@RequestParam Long appId,
-                                                       @RequestParam String message,
-                                                       @RequestPart(value = "files",required = false)
-                                                           MultipartFile[] files,
-                                                       HttpServletRequest request) {
-        // 参数校验
-        if (appId == null || appId <= 0) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "应用ID无效");
-        }
-        if (StrUtil.isBlank(message)) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户消息不能为空");
-        }
-        // 获取当前登录用户
-        User loginUser = userService.getLoginUser(request);
-        // 调用服务生成代码（流式）
-        Flux<String> contentFlux = appService.chatToGenCode(appId, message, loginUser,files);
-        // 转换为 ServerSentEvent 格式
-        return contentFlux
-                .map(chunk -> {
-                    // 将内容包装成JSON对象
-                    Map<String, String> wrapper = Map.of("d", chunk);
-                    String jsonData = JSONUtil.toJsonStr(wrapper);
-                    return ServerSentEvent.<String>builder()
-                            .data(jsonData)
-                            .build();
-                })
-                .concatWith(Mono.just(
-                        // 发送结束事件
-                        ServerSentEvent.<String>builder()
-                                .event("done")
-                                .data("")
-                                .build()
-                ));
     }
 
     /**

@@ -11,7 +11,7 @@ import com.ai.codeplatform.ai.AiCodeGenTypeRoutingService;
 import com.ai.codeplatform.ai.AiCodeGenTypeRoutingServiceFactory;
 import com.ai.codeplatform.constant.AppConstant;
 import com.ai.codeplatform.core.AiCodeGeneratorFacade;
-import com.ai.codeplatform.core.CancelGenerationManager;
+import com.ai.codeplatform.manager.CancelGenerationManager;
 import com.ai.codeplatform.core.builder.VueProjectBuilder;
 import com.ai.codeplatform.core.handler.StreamHandlerExecutor;
 import com.ai.codeplatform.exception.BusinessException;
@@ -19,7 +19,6 @@ import com.ai.codeplatform.exception.ErrorCode;
 import com.ai.codeplatform.manager.CosManager;
 import com.ai.codeplatform.model.dto.app.AppAddRequest;
 import com.ai.codeplatform.model.dto.app.AppQueryRequest;
-import com.ai.codeplatform.model.entity.ChatHistory;
 import com.ai.codeplatform.model.entity.ChatHistoryOriginal;
 import com.ai.codeplatform.model.entity.User;
 import com.ai.codeplatform.model.enums.ChatHistoryMessageTypeEnum;
@@ -162,7 +161,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         if (codeGenTypeEnum == null) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "不支持的代码生成类型");
         }
-        // 校验用户提示词的合法性（考虑上传的文件）
+        // 5.校验用户提示词的合法性（考虑上传的文件）
         AiCodeGenTypeRoutingService routingService = aiCodeGenTypeRoutingServiceFactory.createAiCodeGenTypeRoutingService();
         String intentMessage = message;
         if (files != null && files.length > 0) {
@@ -184,11 +183,11 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "请提供具体的网页修改需求或功能描述。");
         }
 
-        // 1. 构建用户消息内容列表
+        // 6. 构建用户消息内容列表
         List<Content> contents = new ArrayList<>();
         TextContent textContent = new TextContent(message);
         contents.add(textContent);
-        // 构建入库的用户会话历史
+        // 7.构建入库的用户会话历史
         List<Map<String, Object>> serializableContents = new ArrayList<>();
         Map<String, Object> textMap = new HashMap<>();
         textMap.put("type", "text");
@@ -222,19 +221,19 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
                 serializableContents.add(contentMap);
             }
         }
-        // 2. 构造多模态 UserMessage
+        // 8. 构造多模态 UserMessage
         UserMessage userMessage = UserMessage.from(contents);
-        // 4. 序列化为 JSON 字符串
+        // 9. 序列化为 JSON 字符串
         String messageStr = JSONUtil.toJsonStr(serializableContents);
 
-        // 5. 通过校验后，添加用户消息到对话历史
+        // 10. 通过校验后，添加用户消息到对话历史
         chatHistoryService.addChatMessage(appId, messageStr, ChatHistoryMessageTypeEnum.USER.getValue(), loginUser.getId());
         chatHistoryOriginalService.addOriginalChatMessage(appId, messageStr, ChatHistoryMessageTypeEnum.USER.getValue(), loginUser.getId());
-        // 6. 注册取消标志
+        // 11. 注册取消标志
         cancelGenerationManager.register(appId);
-        // 7. 调用 AI 生成代码（流式）
+        // 12. 调用 AI 生成代码（流式）
         Flux<String> codeStream = aiCodeGeneratorFacade.generateAndSaveCodeStream(userMessage, codeGenTypeEnum, appId);
-        // 8. 收集 AI 响应内容并在完成后记录到对话历史
+        // 13. 收集 AI 响应内容并在完成后记录到对话历史
         return streamHandlerExecutor.doExecute(codeStream, chatHistoryService,chatHistoryOriginalService,appId, loginUser, codeGenTypeEnum)
                 .doFinally(signalType -> cancelGenerationManager.remove(appId));
     }

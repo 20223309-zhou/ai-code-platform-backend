@@ -10,7 +10,6 @@ import java.util.regex.Pattern;
  * 代码解析器
  * 提供静态方法解析不同类型的代码内容
  *
- * @author yupi
  */
 @Deprecated
 public class CodeParser {
