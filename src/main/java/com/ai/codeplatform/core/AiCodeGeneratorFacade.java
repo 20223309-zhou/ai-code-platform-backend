@@ -161,11 +161,12 @@ public class AiCodeGeneratorFacade {
                         sink.next(JSONUtil.toJsonStr(toolExecutedMessage));
                     })
                     .onCompleteResponse((ChatResponse response) -> {
-                        cancelGenerationManager.remove(appId);
                         if (cancelGenerationManager.isCancelled(appId)) {
+                            cancelGenerationManager.remove(appId);
                             sink.complete();
                             return;
                         }
+                        cancelGenerationManager.remove(appId);
                         String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/vue_project_" + appId;
                         vueProjectBuilder.buildProject(projectPath);
                         sink.complete();

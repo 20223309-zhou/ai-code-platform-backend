@@ -422,6 +422,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         }
         App app = new App();
         BeanUtil.copyProperties(templateApp, app);
+        app.setInitPrompt(null);
         app.setId(null);
         app.setUserId(loginUser.getId());
         app.setCover(null);
