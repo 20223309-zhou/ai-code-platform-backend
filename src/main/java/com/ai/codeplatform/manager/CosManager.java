@@ -74,9 +74,9 @@ public class CosManager {
         }
         // 1. 校验文件大小
         long fileSize = multipartFile.getSize();
-        final long ONE_M = 1024 * 1024L;
-        if (fileSize > 2 * ONE_M) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "文件大小不能超过 2M");
+        final long ONE_M = 1024 * 1024 * 5L;
+        if (fileSize > ONE_M) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "文件大小不能超过 5M");
         }
         // 2. 校验文件后缀
         String fileSuffix = FileUtil.getSuffix(multipartFile.getOriginalFilename());
