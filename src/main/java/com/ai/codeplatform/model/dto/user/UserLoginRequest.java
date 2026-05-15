@@ -18,4 +18,14 @@ public class UserLoginRequest implements Serializable {
      * 密码
      */
     private String userPassword;
+
+    /**
+     * 验证码key
+     */
+    private String captchaKey;
+
+    /**
+     * 验证码
+     */
+    private String captchaCode;
 }

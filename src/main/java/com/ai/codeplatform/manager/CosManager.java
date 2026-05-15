@@ -21,7 +21,6 @@ import java.util.List;
 /**
  * COS对象存储管理器
  *
- * @author yupi
  */
 @Component
 @Slf4j

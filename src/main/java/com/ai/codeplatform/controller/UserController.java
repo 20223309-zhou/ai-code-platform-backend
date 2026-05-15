@@ -1,6 +1,8 @@
 package com.ai.codeplatform.controller;
 
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.util.IdUtil;
+import cn.hutool.core.util.ObjUtil;
 import com.ai.codeplatform.annotation.AuthCheck;
 import com.ai.codeplatform.common.BaseResponse;
 import com.ai.codeplatform.common.DeleteRequest;
@@ -13,15 +15,19 @@ import com.ai.codeplatform.model.dto.user.*;
 import com.ai.codeplatform.model.vo.LoginUserVO;
 import com.ai.codeplatform.model.vo.UserVO;
 import com.mybatisflex.core.paginate.Page;
+import com.wf.captcha.SpecCaptcha;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.BeanUtils;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
 import com.ai.codeplatform.model.entity.User;
 import com.ai.codeplatform.service.UserService;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 用户 控制层。
@@ -37,6 +43,9 @@ public class UserController {
 
     @Resource
     private CosManager cosManager;
+
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
     /**
      * 用户注册
      *
@@ -63,13 +72,41 @@ public class UserController {
      */
     @PostMapping("/login")
     public BaseResponse<LoginUserVO> userLogin(@RequestBody UserLoginRequest userLoginRequest, HttpServletRequest request) {
-        if (userLoginRequest == null){
+        if (userLoginRequest == null || ObjUtil.hasEmpty(userLoginRequest)){
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        // 获取验证码参数
+        String captchaKey = userLoginRequest.getCaptchaKey();
+        String cacheCode = stringRedisTemplate.opsForValue().get("captcha:" + captchaKey);
+        String requestCaptchaCode = userLoginRequest.getCaptchaCode();
+        if (cacheCode == null || !cacheCode.equalsIgnoreCase(requestCaptchaCode)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "验证码错误或已过期");
         }
         String userAccount = userLoginRequest.getUserAccount();
         String userPassword = userLoginRequest.getUserPassword();
         LoginUserVO loginUserVO = userService.userLogin(userAccount, userPassword, request);
+        stringRedisTemplate.delete("captcha:" + captchaKey);
         return ResultUtils.success(loginUserVO);
+    }
+
+    /**
+     * 生成验证码
+     * @return
+     */
+    @PostMapping("/getCaptcha")
+    public BaseResponse<Map<String, String>> getCaptcha(@RequestParam(required = false) String captchaKey) {
+        // 删除旧验证码
+        if (captchaKey != null){
+            stringRedisTemplate.delete("captcha:" + captchaKey);
+        }
+        SpecCaptcha captcha = new SpecCaptcha(130, 48, 4);
+        String genCaptchaKey = IdUtil.fastSimpleUUID();
+        stringRedisTemplate.opsForValue().set(
+                "captcha:" + genCaptchaKey, captcha.text(), 5, TimeUnit.MINUTES);
+        return ResultUtils.success(Map.of(
+                "captchaKey", genCaptchaKey,
+                "captchaImage", captcha.toBase64()
+        ));
     }
 
     /**
