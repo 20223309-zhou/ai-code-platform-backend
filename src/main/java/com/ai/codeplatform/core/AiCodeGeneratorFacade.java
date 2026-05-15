@@ -118,10 +118,12 @@ public class AiCodeGeneratorFacade {
         return Flux.create(sink -> {
             tokenStream
                     .onPartialResponse((String partialResponse) -> {
+                        // 检查是否已取消生成，若取消则终止流
                         if (cancelGenerationManager.isCancelled(appId)) {
                             sink.complete();
                             return;
                         }
+                        // 封装AI响应消息并发送到流中
                         AiResponseMessage aiResponseMessage = new AiResponseMessage(partialResponse);
                         sink.next(JSONUtil.toJsonStr(aiResponseMessage));
                     })
@@ -149,6 +151,7 @@ public class AiCodeGeneratorFacade {
                         ToolRequestMessage toolRequestMessage = new ToolRequestMessage(toolExecutionRequest);
                         sink.next(JSONUtil.toJsonStr(toolRequestMessage));
                     })
+                    // 处理工具执行完成后的结果
                     .onToolExecuted((ToolExecution toolExecution) -> {
                         if (cancelGenerationManager.isCancelled(appId)) {
                             sink.complete();
@@ -173,6 +176,7 @@ public class AiCodeGeneratorFacade {
                         sink.error(error);
                     })
                     .start();
+
         });
     }
 
