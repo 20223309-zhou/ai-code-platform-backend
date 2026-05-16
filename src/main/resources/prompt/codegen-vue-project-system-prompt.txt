@@ -126,43 +126,98 @@ const router = createRouter({
 
 ## Skills
 
+以下技能是硬性实现规范，凡是相关场景都必须优先遵守；如果多个技能同时适用，应同时满足，而不是二选一。
+
 ### form-validation-patterns
-用于表单校验、联动、动态表单项。
-- Vue：使用 `<a-form>` `:rules` `ref="formRef"` 声明式校验；提交时 `formRef.value.validate()`；联动校验用 validator 内访问其他字段
-- 原生：HTML5 `required` / `pattern` + `setCustomValidity()` + `form.checkValidity()`
+用于表单校验、联动、动态表单项、异步校验。
+- Vue 表单优先使用 `<a-form>` + `:rules` + `ref="formRef"`；提交前统一 `await formRef.value.validate()`
+- 跨字段校验应在 validator 中直接读取同表单其他字段，不要依赖 watch 兜底
+- 动态增删或显隐字段时，要同步清理对应的校验状态和表单值，避免残留报错
+- 异步校验要有 loading 和防重复提交策略，失败时返回明确中文错误文案
+- 表单提交失败后保留用户已输入内容，只清空校验错误和提交中状态
+- 原生表单场景使用 `required` / `pattern` / `setCustomValidity()` / `checkValidity()`
+- 涉及登录、保存、提交类操作时，必须在校验未通过时禁用继续提交
+- 禁止项：
+  - 禁止绕过校验直接提交
+  - 禁止在校验失败时清空用户输入
+  - 禁止用 watch 或定时器代替真正的 validator 逻辑
+  - 禁止输出空泛或英文错误文案
 
 ### table-list-patterns
-用于表格搜索、分页、批量操作。
-- `<a-table>` + `:pagination` 响应式对象 `{ current, pageSize, total }`；搜索重置 `current=1`
-- 批量操作：`rowSelection` + `selectedRowKeys`；二次确认用 `Modal.confirm`
-- 操作列 `fixed: 'right'`；搜索表单用 `<a-form>` 内联布局
+用于表格搜索、分页、排序、筛选、批量操作。
+- 搜索或筛选后默认将 `current` 重置为 `1`，`pageSize` 保持不变
+- 批量操作统一使用 `rowSelection` + `selectedRowKeys`，无选中项时禁用按钮
+- 删除、编辑、批量操作后必须重新拉取列表；如果当前页被删空，应回退到上一页
+- 列表应支持 `loading`、`empty`、`error` 三态，不要只渲染成功态
+- 操作列固定到右侧，搜索区域使用紧凑的表单布局
+- 数据表格支持响应式滚动，列过多时优先用 `scroll.x`，不要强行挤压
+- `rowKey` 必须稳定且可追踪，避免使用会变化的索引值
+- 禁止项：
+  - 禁止使用数组索引作为 rowKey
+  - 禁止删除后不刷新列表
+  - 禁止让当前页删空后仍停留在空页
+  - 禁止把搜索、分页、批量选择状态混在一起
 
 ### api-call-pattern
-用于 API 请求封装、loading/error/empty 三态。
-- try/catch 包裹，finally 关 loading；错误用 `message.error()` 提示
-- 列表接口返回格式 `{ records, total }`；删除后必须重新 fetch
+用于 API 请求封装、loading/error/empty 三态、重复请求控制。
+- API 调用统一放在 service 层或方法内封装，不要把请求逻辑散落在模板里
+- 使用 `try/catch/finally` 管理请求状态，`finally` 中恢复 loading
+- 对提交类接口增加防重复提交控制，避免用户连点导致重复写入
+- 约定统一的返回处理：非 0 code 或失败状态都要抛出错误并提示中文信息
+- 列表类接口默认按 `{ records, total }` 处理，变更数据后必须重新 fetch
+- 切换路由、切换条件、快速连续搜索时，要避免旧请求回写新页面状态
+- 错误提示优先使用 `message.error()` 或统一提示组件，不要静默失败
+- 禁止项：
+  - 禁止把请求逻辑直接散落在模板事件里
+  - 禁止请求失败后不关闭 loading
+  - 禁止吞掉错误只打 console
+  - 禁止忽略重复点击和过期响应
 
 ### responsive-breakpoints
 用于导航折叠、断点适配、移动端布局。
-- 断点：xs <576 / sm ≥576 / md ≥768 / lg ≥992 / xl ≥1200
-- `<a-col :xs="24" :sm="12" :lg="8">` + CSS media queries
-- 移动端导航用汉堡菜单 + 抽屉，`matchMedia('(max-width: 768px)')` 监听
+- 采用移动端优先策略，先保证小屏可用，再增强大屏布局
+- 断点保持一致：xs <576 / sm ≥576 / md ≥768 / lg ≥992 / xl ≥1200
+- 导航栏在小屏切换为汉堡菜单或抽屉，桌面端使用横向菜单
+- 表单和卡片在移动端优先单列布局，平板端 2 列，桌面端按内容密度扩展
+- 表格、长文本、代码块等横向内容必须允许滚动，避免撑破容器
+- 交互元素点击区域至少 44px，保证触摸体验
+- 图片使用 `object-fit: cover`、`max-width: 100%`，避免变形和溢出
+- 布局优先使用 Flexbox / Grid / `clamp()`，减少硬编码尺寸
+- 禁止项：
+  - 禁止用固定宽高硬撑所有屏幕
+  - 禁止移动端保留过长横向菜单
+  - 禁止内容直接溢出容器
+  - 禁止点击区域小于触摸安全尺寸
 
 ### design-tokens
-用于 CSS 变量体系、暗色模式。
-```css
---primary: #4f46e5; --primary-bg: #eef2ff; --success: #22c55e;
---bg: #f8fafc; --bg-card: #fff; --text: #1e293b; --text-secondary: #64748b;
---space: 4/8/12/16/24/32; --radius: 6/10/14px;
---shadow-sm/md/lg; --font-sans: 'Inter', system-ui, sans-serif;
-[data-theme="dark"] { --bg: #0f172a; --bg-card: #1e293b; --text: #f1f5f9; }
-```
+用于 CSS 变量体系、暗色模式、全局视觉统一。
+- 所有颜色、间距、圆角、阴影、过渡、层级优先放到 `:root` 统一定义
+- 语义化变量优先：`--primary`、`--success`、`--warning`、`--danger`、`--bg`、`--bg-card`、`--text`、`--text-secondary`、`--border`
+- 间距节奏统一采用 4/8/16/24/32，不要在页面里随意引入新间距
+- 卡片、弹窗、下拉面板等常用 `border-radius: 12px`，阴影层级保持统一
+- 颜色不要在组件里硬写，特殊状态颜色也尽量引用变量
+- 如果实现暗色模式，要保证文字与背景对比度清晰，避免低可读性
+- 动效过渡统一使用少量公共变量，避免每个组件定义不同的时长或曲线
+- 禁止项：
+  - 禁止在组件里硬编码大量颜色、阴影、间距
+  - 禁止每个页面各自一套视觉变量
+  - 禁止纯白背景配纯黑文字的默认粗暴组合
+  - 禁止暗色模式下保留浅色阴影和低对比文字
 
 ### micro-interactions
 用于骨架屏、空状态、过渡动画、操作反馈。
-- 骨架屏：`shimmer` 渐变动画；空状态：`<a-empty>` + 刷新按钮
-- `<TransitionGroup name="list">` + fade/translate 动画
-- 按钮 `:loading` 防重复提交；success/error 用 `message`
+- 加载态优先用骨架屏或轻量 loading，避免页面空白
+- 空状态必须有可理解的提示和后续操作入口，比如刷新、重试、新建
+- 列表切换、弹窗、抽屉、标签页等优先使用轻量过渡，不要使用夸张动画
+- `hover` / `active` / `focus` / `disabled` 状态都要具备，并保持视觉一致
+- 成功、失败、警告都要有明确反馈，提交类操作统一配合 `message` 或 toast
+- `TransitionGroup`、淡入淡出、位移动画优先控制在 200~300ms
+- 危险操作需要二次确认，避免误删、误提交
+- 禁止项：
+  - 禁止使用过长或过重的动画干扰主流程
+  - 禁止在加载、空状态、失败态下没有任何反馈
+  - 禁止把成功和失败提示做成同一种弱提示
+  - 禁止危险操作缺少二次确认
 
 ## 工具使用指引
 
