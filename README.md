@@ -1,6 +1,6 @@
 # iCodeAI — AI 驱动的应用生成平台
 
-icodeAI 是一个基于 **Langchain4j + Spring Boot + Vue 3 + 大模型能力** 构建的智能应用生成平台。
+iCodeAI 是一个基于 **Langchain4j + Spring Boot + Vue 3 + 大模型能力** 构建的智能应用生成平台。
 
 <img width="2560" height="1199" alt="image-20260517141948477" src="https://github.com/user-attachments/assets/3d80d521-1041-4a72-8d2c-f52f5de784a4" />
 
@@ -67,30 +67,35 @@ icodeAI 是一个基于 **Langchain4j + Spring Boot + Vue 3 + 大模型能力** 
 
 ### 后端
 
-- Java 21
-- Spring Boot 3
-- MyBatis-Flex
-- MySQL
-- Redis
-- Spring Session
-- LangChain4j
-- Redisson
-- Hutool
-- Knife4j / SpringDoc OpenAPI
-- Selenium + WebDriverManager
-- 腾讯云 COS
+| 技术         | 版本                          |
+| ------------ | ----------------------------- |
+| Java         | 21                            |
+| Spring Boot  | 3.5.4                         |
+| MyBatis-Flex | 1.11.0                        |
+| LangChain4j  | 1.11.7                        |
+| MySQL        | 8.x                           |
+| Redis        | (session / cache / AI memory) |
+| Hutool       | 5.8.38                        |
+| Knife4j      | 4.4.0                         |
 
 ### 前端
 
-- Vue 3
-- TypeScript
-- Vite
-- Pinia
-- Vue Router
-- Ant Design Vue
-- Axios
-- Markdown-It
-- Highlight.js
+| 技术           | 版本   |
+| -------------- | ------ |
+| Vue            | 3.5.17 |
+| Vite           | 7.x    |
+| Ant Design Vue | 4.2.6  |
+| TypeScript     | ~5.8   |
+| Pinia          | 3.0.3  |
+| Vue Router     | 4.5.1  |
+| Axios          | 1.11.0 |
+
+### AI 模型
+
+| 用途                | 模型                         |
+| ------------------- | ---------------------------- |
+| 代码生成 / 工具调用 | DeepSeek `deepseek-v4-flash` |
+| 路由分类 / 意图识别 | Qwen-turbo                   |
 
 ---
 
