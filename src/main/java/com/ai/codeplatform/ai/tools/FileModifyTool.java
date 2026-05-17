@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.util.stream.Stream;
 
 /**
  * 文件修改工具
@@ -35,9 +36,18 @@ public class FileModifyTool extends BaseTool {
         try {
             Path path = Paths.get(relativeFilePath);
             if (!path.isAbsolute()) {
-                String projectDirName = "vue_project_" + appId;
-                Path projectRoot = Paths.get(AppConstant.CODE_OUTPUT_ROOT_DIR, projectDirName);
-                path = projectRoot.resolve(relativeFilePath);
+                // 扫描 tmp/code_output 下所有以 _{appId} 结尾的目录
+                Path outputDir = Paths.get(AppConstant.CODE_OUTPUT_ROOT_DIR);
+                try (Stream<Path> dirs = Files.list(outputDir)) {
+                    Path projectRoot = dirs
+                            .filter(Files::isDirectory)
+                            .filter(d -> d.getFileName().toString().endsWith("_" + appId))
+                            .findFirst()
+                            .orElse(outputDir.resolve("vue_project_" + appId));
+                    path = projectRoot.resolve(relativeFilePath);
+                } catch (IOException e) {
+                    path = outputDir.resolve("vue_project_" + appId).resolve(relativeFilePath);
+                }
             }
             if (!Files.exists(path) || !Files.isRegularFile(path)) {
                 return "错误：文件不存在或不是文件 - " + relativeFilePath;

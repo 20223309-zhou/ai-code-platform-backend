@@ -38,12 +38,13 @@ public class StreamHandlerExecutor {
                                   ChatHistoryService chatHistoryService,
                                   ChatHistoryOriginalService chatHistoryOriginalService,
                                   long appId, User loginUser, CodeGenTypeEnum codeGenType) {
-        return switch (codeGenType) {
-            case VUE_PROJECT -> // 使用注入的组件实例
-                    jsonMessageStreamHandler.handle(originFlux, chatHistoryService, chatHistoryOriginalService,appId, loginUser);
-            case HTML, MULTI_FILE -> // 简单文本处理器不需要依赖注入
-                    new SimpleTextStreamHandler().handle(originFlux, chatHistoryService,chatHistoryOriginalService ,appId, loginUser);
-            case WARNING -> throw new BusinessException(ErrorCode.SYSTEM_ERROR,"提示词异常");
-        };
+        return jsonMessageStreamHandler.handle(originFlux, chatHistoryService, chatHistoryOriginalService,appId, loginUser);
+//                switch (codeGenType) {
+//            case VUE_PROJECT -> // 使用注入的组件实例
+//                    jsonMessageStreamHandler.handle(originFlux, chatHistoryService, chatHistoryOriginalService,appId, loginUser);
+//            case HTML, MULTI_FILE -> // 简单文本处理器不需要依赖注入
+//                    new SimpleTextStreamHandler().handle(originFlux, chatHistoryService,chatHistoryOriginalService ,appId, loginUser);
+//            case WARNING -> throw new BusinessException(ErrorCode.SYSTEM_ERROR,"提示词异常");
+// };
     }
 }
