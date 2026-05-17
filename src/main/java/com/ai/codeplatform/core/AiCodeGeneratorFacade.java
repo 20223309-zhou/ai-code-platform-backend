@@ -1,5 +1,6 @@
 package com.ai.codeplatform.core;
 
+import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.ai.codeplatform.ai.AiCodeGeneratorService;
 import com.ai.codeplatform.ai.AiCodeGeneratorServiceFactory;
@@ -29,6 +30,7 @@ import reactor.core.publisher.Flux;
 
 import java.io.File;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * AI 代码生成外观类，组合生成和保存功能
@@ -89,12 +91,12 @@ public class AiCodeGeneratorFacade {
         AiCodeGeneratorService aiCodeGeneratorService = aiCodeGeneratorServiceFactory.getAiCodeGeneratorService(appId, codeGenTypeEnum);
         return switch (codeGenTypeEnum) {
             case HTML -> {
-                Flux<String> codeStream = aiCodeGeneratorService.generateHtmlCodeStream(userMessage);
-                yield processCodeStream(codeStream, CodeGenTypeEnum.HTML, appId);
+                TokenStream codeStream = aiCodeGeneratorService.generateHtmlCodeStream(appId, userMessage);
+                yield processTokenStream(codeStream, CodeGenTypeEnum.HTML, appId);
             }
             case MULTI_FILE -> {
-                Flux<String> codeStream = aiCodeGeneratorService.generateMultiFileCodeStream(userMessage);
-                yield processCodeStream(codeStream, CodeGenTypeEnum.MULTI_FILE, appId);
+                TokenStream codeStream = aiCodeGeneratorService.generateMultiFileCodeStream(appId, userMessage);
+                yield processTokenStream(codeStream, CodeGenTypeEnum.MULTI_FILE, appId);
             }
             case VUE_PROJECT -> {
                 TokenStream codeStream = aiCodeGeneratorService.generateVueProjectCodeStream(appId, userMessage);
@@ -187,38 +189,134 @@ public class AiCodeGeneratorFacade {
         });
     }
 
-
     /**
-     * 通用流式代码处理方法（使用 appId）
-     *
-     * @param codeStream  代码流
+     * 通用流式代码处理方法（使用 tokenStream）
+     * @param tokenStream 代码流
      * @param codeGenType 代码生成类型
      * @param appId       应用 ID
      * @return 流式响应
      */
-    private Flux<String> processCodeStream(Flux<String> codeStream, CodeGenTypeEnum codeGenType, Long appId) {
+    private Flux<String> processTokenStream(TokenStream tokenStream, CodeGenTypeEnum codeGenType, Long appId) {
         StringBuilder codeBuilder = new StringBuilder();
-        return codeStream
-                .takeWhile(chunk -> !cancelGenerationManager.isCancelled(appId))
-                .doOnNext(chunk -> {
-                    codeBuilder.append(chunk);
-                })
-                .doOnComplete(() -> {
-                    cancelGenerationManager.remove(appId);
-                    if (cancelGenerationManager.isCancelled(appId)) {
-                        return;
-                    }
-                    try {
-                        String completeCode = codeBuilder.toString();
-                        Object parsedResult = CodeParserExecutor.executeParser(completeCode, codeGenType);
-                        File savedDir = CodeFileSaverExecutor.executeSaver(parsedResult, codeGenType, appId);
-                        log.info("保存成功，路径为：" + savedDir.getAbsolutePath());
-                    } catch (Exception e) {
-                        log.error("保存失败: {}", e.getMessage());
-                    }
-                })
-                .doOnCancel(() -> cancelGenerationManager.remove(appId))
-                .doOnError(e -> cancelGenerationManager.remove(appId));
+        AtomicBoolean toolInvoked = new AtomicBoolean(false);
+        return Flux.create(sink -> {
+            tokenStream
+                    .onPartialResponseWithContext((PartialResponse partialResponse, PartialResponseContext context) -> {
+                        // 检查是否已取消生成，若取消则终止流
+                        if (cancelGenerationManager.isCancelled(appId)) {
+                            context.streamingHandle().cancel();
+                            log.info("生成阶段，用户取消生成，取消任务：{}", appId);
+                            cancelGenerationManager.remove(appId);
+                            sink.complete();
+                            return;
+                        }
+                        codeBuilder.append(partialResponse.text());
+                        // 封装AI响应消息并发送到流中
+                        AiResponseMessage aiResponseMessage = new AiResponseMessage(partialResponse.text());
+                        sink.next(JSONUtil.toJsonStr(aiResponseMessage));
+                    })
+                    .onPartialThinkingWithContext((PartialThinking partialThinking,PartialThinkingContext context) -> {
+                        if (cancelGenerationManager.isCancelled(appId)) {
+                            context.streamingHandle().cancel();
+                            log.info("思考阶段，用户取消生成，取消任务：{}", appId);
+                            cancelGenerationManager.remove(appId);
+                            sink.complete();
+                            return;
+                        }
+                        Map<String, String> thinkingMsg = Map.of(
+                                "type", StreamMessageTypeEnum.THINKING.getValue(),
+                                "data", partialThinking.text()
+                        );
+                        sink.next(JSONUtil.toJsonStr(thinkingMsg));
+                    })
+                    .onPartialToolCallWithContext((PartialToolCall partialToolCall, PartialToolCallContext context) -> {
+                        if (cancelGenerationManager.isCancelled(appId)) {
+                            context.streamingHandle().cancel();
+                            cancelGenerationManager.remove(appId);
+                            sink.complete();
+                            return;
+                        }
+                        toolInvoked.set(true);
+                        ToolExecutionRequest toolExecutionRequest = ToolExecutionRequest.builder()
+                                .id(partialToolCall.id())
+                                .name(partialToolCall.name())
+                                .arguments(partialToolCall.partialArguments())
+                                .build();
+                        ToolRequestMessage toolRequestMessage = new ToolRequestMessage(toolExecutionRequest);
+                        sink.next(JSONUtil.toJsonStr(toolRequestMessage));
+                    })
+                    // 处理工具执行完成后的结果
+                    .onToolExecuted((ToolExecution toolExecution) -> {
+                        if (cancelGenerationManager.isCancelled(appId)) {
+                            sink.complete();
+                            return;
+                        }
+                        ToolExecutedMessage toolExecutedMessage = new ToolExecutedMessage(toolExecution);
+                        sink.next(JSONUtil.toJsonStr(toolExecutedMessage));
+                    })
+                    .onCompleteResponse((ChatResponse response) -> {
+                        if (cancelGenerationManager.isCancelled(appId)) {
+                            cancelGenerationManager.remove(appId);
+                            sink.complete();
+                            return;
+                        }
+                        cancelGenerationManager.remove(appId);
+                        sink.complete();
+                        // 如果工具已被调用（修改场景），文件已被工具直接写盘，不需要解析保存
+                        if (toolInvoked.get()) {
+                            return;
+                        }
+                        try {
+                            String completeCode = codeBuilder.toString();
+                            if (StrUtil.isNotBlank(completeCode)){
+                                Object parsedResult = CodeParserExecutor.executeParser(completeCode, codeGenType);
+                                File savedDir = CodeFileSaverExecutor.executeSaver(parsedResult, codeGenType, appId);
+                                log.info("保存成功，路径为：" + savedDir.getAbsolutePath());
+                            }
+                        } catch (Exception e) {
+                            log.error("保存失败: {}", e.getMessage());
+                        }
+                    })
+                    .onError((Throwable error) -> {
+                        cancelGenerationManager.remove(appId);
+                        error.printStackTrace();
+                        sink.error(error);
+                    })
+                    .start();
+        });
     }
+
+//    /**
+//     * 通用流式代码处理方法（使用 appId）
+//     *
+//     * @param codeStream  代码流
+//     * @param codeGenType 代码生成类型
+//     * @param appId       应用 ID
+//     * @return 流式响应
+//     */
+//    private Flux<String> processCodeStream(Flux<String> codeStream, CodeGenTypeEnum codeGenType, Long appId) {
+//        StringBuilder codeBuilder = new StringBuilder();
+//        return codeStream
+//                .takeWhile(chunk -> !cancelGenerationManager.isCancelled(appId))
+//                .doOnNext(chunk -> {
+//                    codeBuilder.append(chunk);
+//                })
+//                .doOnComplete(() -> {
+//                    cancelGenerationManager.remove(appId);
+//                    if (cancelGenerationManager.isCancelled(appId)) {
+//                        return;
+//                    }
+//                    try {
+//                        String completeCode = codeBuilder.toString();
+//                        Object parsedResult = CodeParserExecutor.executeParser(completeCode, codeGenType);
+//                        File savedDir = CodeFileSaverExecutor.executeSaver(parsedResult, codeGenType, appId);
+//                        log.info("保存成功，路径为：" + savedDir.getAbsolutePath());
+//                    } catch (Exception e) {
+//                        log.error("保存失败: {}", e.getMessage());
+//                    }
+//                })
+//                .doOnCancel(() -> cancelGenerationManager.remove(appId))
+//                .doOnError(e -> cancelGenerationManager.remove(appId));
+//    }
 
 }

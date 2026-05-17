@@ -1,9 +1,7 @@
 package com.ai.codeplatform.ai;
 
 import com.ai.codeplatform.ai.guardrail.PromptSafetyInputGuardrail;
-import com.ai.codeplatform.ai.tools.FileWriteTool;
-import com.ai.codeplatform.ai.tools.ToolManager;
-import com.ai.codeplatform.ai.tools.WebFetchTool;
+import com.ai.codeplatform.ai.tools.*;
 import com.ai.codeplatform.exception.BusinessException;
 import com.ai.codeplatform.exception.ErrorCode;
 import com.ai.codeplatform.model.enums.CodeGenTypeEnum;
@@ -105,8 +103,8 @@ public class AiCodeGeneratorServiceFactory {
                 yield AiServices.builder(AiCodeGeneratorService.class)
                         .chatModel(chatModel)
                         .streamingChatModel(openAiStreamingChatModel)
-                        .chatMemory(chatMemory)
-                        .tools(new WebFetchTool())
+                        .chatMemoryProvider(memoryId -> chatMemory)
+                        .tools(new WebFetchTool(),new FileReadTool(),new FileModifyTool())
                         .inputGuardrails(new PromptSafetyInputGuardrail())// 添加输入护轨
                         .build();
             }

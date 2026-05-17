@@ -41,14 +41,14 @@ public interface AiCodeGeneratorService {
     @SystemMessage(fromResource = "prompt/codegen-html-system-prompt.txt")
     Flux<String> generateHtmlCodeStream(String userMessage);
 
-    /**
-     * 生成 HTML 代码（流式）
-     *
-     * @param userMessage 用户消息
-     * @return 生成的代码结果
-     */
-    @SystemMessage(fromResource = "prompt/codegen-html-system-prompt.txt")
-    Flux<String> generateHtmlCodeStream(dev.langchain4j.data.message.UserMessage userMessage);
+//    /**
+//     * 生成 HTML 代码（流式）
+//     *
+//     * @param userMessage 用户消息
+//     * @return 生成的代码结果
+//     */
+//    @SystemMessage(fromResource = "prompt/codegen-html-system-prompt.txt")
+//    Flux<String> generateHtmlCodeStream(dev.langchain4j.data.message.UserMessage userMessage);
 
     /**
      * 生成多文件代码（流式）
@@ -59,6 +59,15 @@ public interface AiCodeGeneratorService {
     @SystemMessage(fromResource = "prompt/codegen-multi-file-system-prompt.txt")
     Flux<String> generateMultiFileCodeStream(String userMessage);
 
+//    /**
+//     * 生成多文件代码（流式）
+//     *
+//     * @param userMessage 用户消息
+//     * @return 生成的代码结果
+//     */
+//    @SystemMessage(fromResource = "prompt/codegen-multi-file-system-prompt.txt")
+//    Flux<String> generateMultiFileCodeStream(dev.langchain4j.data.message.UserMessage userMessage);
+
     /**
      * 生成多文件代码（流式）
      *
@@ -66,8 +75,16 @@ public interface AiCodeGeneratorService {
      * @return 生成的代码结果
      */
     @SystemMessage(fromResource = "prompt/codegen-multi-file-system-prompt.txt")
-    Flux<String> generateMultiFileCodeStream(dev.langchain4j.data.message.UserMessage userMessage);
+    TokenStream generateMultiFileCodeStream(@MemoryId Long appId, @UserMessage dev.langchain4j.data.message.UserMessage userMessage);
 
+    /**
+     * 生成 HTML 代码（流式）
+     *
+     * @param userMessage 用户消息
+     * @return 生成的代码结果
+     */
+    @SystemMessage(fromResource = "prompt/codegen-html-system-prompt.txt")
+    TokenStream generateHtmlCodeStream(@MemoryId Long appId, @UserMessage dev.langchain4j.data.message.UserMessage userMessage);
 
     /**
      * 生成 Vue 项目代码（流式）
