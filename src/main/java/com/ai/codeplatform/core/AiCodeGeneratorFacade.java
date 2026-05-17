@@ -19,9 +19,7 @@ import com.ai.codeplatform.manager.CancelGenerationManager;
 import com.ai.codeplatform.model.enums.CodeGenTypeEnum;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.UserMessage;
-import dev.langchain4j.model.chat.response.ChatResponse;
-import dev.langchain4j.model.chat.response.PartialThinking;
-import dev.langchain4j.model.chat.response.PartialToolCall;
+import dev.langchain4j.model.chat.response.*;
 import dev.langchain4j.service.TokenStream;
 import dev.langchain4j.service.tool.ToolExecution;
 import jakarta.annotation.Resource;
@@ -117,18 +115,24 @@ public class AiCodeGeneratorFacade {
     private Flux<String> processTokenStream(TokenStream tokenStream, Long appId) {
         return Flux.create(sink -> {
             tokenStream
-                    .onPartialResponse((String partialResponse) -> {
+                    .onPartialResponseWithContext((PartialResponse partialResponse, PartialResponseContext context) -> {
                         // 检查是否已取消生成，若取消则终止流
                         if (cancelGenerationManager.isCancelled(appId)) {
+                            context.streamingHandle().cancel();
+                            log.info("生成阶段，用户取消生成，取消任务：{}", appId);
+                            cancelGenerationManager.remove(appId);
                             sink.complete();
                             return;
                         }
                         // 封装AI响应消息并发送到流中
-                        AiResponseMessage aiResponseMessage = new AiResponseMessage(partialResponse);
+                        AiResponseMessage aiResponseMessage = new AiResponseMessage(partialResponse.text());
                         sink.next(JSONUtil.toJsonStr(aiResponseMessage));
                     })
-                    .onPartialThinking((PartialThinking partialThinking) -> {
+                    .onPartialThinkingWithContext((PartialThinking partialThinking,PartialThinkingContext context) -> {
                         if (cancelGenerationManager.isCancelled(appId)) {
+                            context.streamingHandle().cancel();
+                            log.info("思考阶段，用户取消生成，取消任务：{}", appId);
+                            cancelGenerationManager.remove(appId);
                             sink.complete();
                             return;
                         }
@@ -138,8 +142,10 @@ public class AiCodeGeneratorFacade {
                         );
                         sink.next(JSONUtil.toJsonStr(thinkingMsg));
                     })
-                    .onPartialToolCall((PartialToolCall partialToolCall) -> {
+                    .onPartialToolCallWithContext((PartialToolCall partialToolCall, PartialToolCallContext context) -> {
                         if (cancelGenerationManager.isCancelled(appId)) {
+                            context.streamingHandle().cancel();
+                            cancelGenerationManager.remove(appId);
                             sink.complete();
                             return;
                         }
