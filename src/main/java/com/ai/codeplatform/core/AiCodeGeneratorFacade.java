@@ -198,7 +198,7 @@ public class AiCodeGeneratorFacade {
      */
     private Flux<String> processTokenStream(TokenStream tokenStream, CodeGenTypeEnum codeGenType, Long appId) {
         StringBuilder codeBuilder = new StringBuilder();
-        AtomicBoolean toolInvoked = new AtomicBoolean(false);
+        AtomicBoolean writeToolInvoked = new AtomicBoolean(false);
         return Flux.create(sink -> {
             tokenStream
                     .onPartialResponseWithContext((PartialResponse partialResponse, PartialResponseContext context) -> {
@@ -236,7 +236,11 @@ public class AiCodeGeneratorFacade {
                             sink.complete();
                             return;
                         }
-                        toolInvoked.set(true);
+                        // 只有写文件的工具才标记跳过保存，只读工具（WebFetch/FileRead）不阻塞
+                        String toolName = partialToolCall.name();
+                        if ("modifyFile".equals(toolName) || "writeFile".equals(toolName) || "deleteFile".equals(toolName)) {
+                            writeToolInvoked.set(true);
+                        }
                         ToolExecutionRequest toolExecutionRequest = ToolExecutionRequest.builder()
                                 .id(partialToolCall.id())
                                 .name(partialToolCall.name())
@@ -262,8 +266,9 @@ public class AiCodeGeneratorFacade {
                         }
                         cancelGenerationManager.remove(appId);
                         sink.complete();
-                        // 如果工具已被调用（修改场景），文件已被工具直接写盘，不需要解析保存
-                        if (toolInvoked.get()) {
+                        // 写文件工具已被调用时（修改场景），文件已被工具直接写盘，不需要解析保存
+                        // 只读工具（WebFetchTool/FileReadTool）不阻塞正常保存
+                        if (writeToolInvoked.get()) {
                             return;
                         }
                         try {

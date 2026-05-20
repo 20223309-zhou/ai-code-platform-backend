@@ -5,6 +5,7 @@ import com.ai.codeplatform.ai.tools.*;
 import com.ai.codeplatform.exception.BusinessException;
 import com.ai.codeplatform.exception.ErrorCode;
 import com.ai.codeplatform.model.enums.CodeGenTypeEnum;
+import com.ai.codeplatform.rag.config.ConditionalContentRetriever;
 import com.ai.codeplatform.service.ChatHistoryOriginalService;
 import com.ai.codeplatform.service.ChatHistoryService;
 import com.ai.codeplatform.utils.SpringContextUtil;
@@ -15,6 +16,8 @@ import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
+import dev.langchain4j.rag.RetrievalAugmentor;
+import dev.langchain4j.rag.content.retriever.EmbeddingStoreContentRetriever;
 import dev.langchain4j.service.AiServices;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -33,13 +36,13 @@ public class AiCodeGeneratorServiceFactory {
     private RedisChatMemoryStore redisChatMemoryStore;
 
     @Resource
-    private ChatHistoryService chatHistoryService;
-
-    @Resource
     private ChatHistoryOriginalService chatHistoryOriginalService;
 
     @Resource
     private ToolManager toolManager;
+
+    @Resource
+    private RetrievalAugmentor retrievalAugmentor;
     /**
      * AI 服务实例缓存
      */
@@ -89,6 +92,7 @@ public class AiCodeGeneratorServiceFactory {
                 StreamingChatModel reasoningStreamingChatModel = SpringContextUtil.getBean("reasoningStreamingChatModelPrototype", StreamingChatModel.class);
                 yield AiServices.builder(AiCodeGeneratorService.class)
                         .streamingChatModel(reasoningStreamingChatModel)
+                        .retrievalAugmentor(retrievalAugmentor)
                         .chatMemoryProvider(memoryId -> chatMemory)
                         .tools(toolManager.getAllTools())
                         .inputGuardrails(new PromptSafetyInputGuardrail())// 添加输入护轨
@@ -103,6 +107,7 @@ public class AiCodeGeneratorServiceFactory {
                 yield AiServices.builder(AiCodeGeneratorService.class)
                         .chatModel(chatModel)
                         .streamingChatModel(openAiStreamingChatModel)
+                        .retrievalAugmentor(retrievalAugmentor)
                         .chatMemoryProvider(memoryId -> chatMemory)
                         .tools(new WebFetchTool(),new FileReadTool(),new FileModifyTool())
                         .inputGuardrails(new PromptSafetyInputGuardrail())// 添加输入护轨

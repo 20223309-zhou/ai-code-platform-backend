@@ -7,6 +7,7 @@ import com.ai.codeplatform.exception.BusinessException;
 import com.ai.codeplatform.exception.ErrorCode;
 import com.ai.codeplatform.model.dto.user.UserQueryRequest;
 import com.ai.codeplatform.model.enums.UserRoleEnum;
+import com.ai.codeplatform.model.enums.VipEnum;
 import com.ai.codeplatform.model.vo.LoginUserVO;
 import com.ai.codeplatform.model.vo.UserVO;
 import com.mybatisflex.core.query.QueryWrapper;
@@ -66,6 +67,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
         // 4. 插入数据
         User user = new User();
         user.setUserAccount(userAccount);
+        user.setVipLevel(VipEnum.NORMAL.getValue());
+        user.setQuota(5);
         user.setUserPassword(encryptPassword);
         user.setUserName("无名");
         user.setUserRole(UserRoleEnum.USER.getValue());
@@ -221,7 +224,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
         String userRole = userQueryRequest.getUserRole();
         String sortField = userQueryRequest.getSortField();
         String sortOrder = userQueryRequest.getSortOrder();
+        String vip = userQueryRequest.getVipLevel();
         return QueryWrapper.create()
+                .eq("vipLevel", vip)
                 .eq("id", id)
                 .eq("userRole", userRole)
                 .like("userAccount", userAccount)

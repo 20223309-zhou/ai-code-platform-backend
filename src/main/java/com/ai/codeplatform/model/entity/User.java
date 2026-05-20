@@ -51,6 +51,18 @@ public class User implements Serializable {
     private String userPassword;
 
     /**
+     * vip
+     */
+    @Column("vipLevel")
+    private String vipLevel;
+
+    /**
+     * 配额
+     */
+    @Column("quota")
+    private int quota;
+
+    /**
      * 用户昵称
      */
     @Column("userName")

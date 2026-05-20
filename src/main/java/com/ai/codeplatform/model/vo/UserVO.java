@@ -1,5 +1,6 @@
 package com.ai.codeplatform.model.vo;
 
+import com.mybatisflex.annotation.Column;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -17,6 +18,16 @@ public class UserVO implements Serializable {
      * 账号
      */
     private String userAccount;
+
+    /**
+     * vip
+     */
+    private int vipLevel;
+
+    /**
+     * 配额
+     */
+    private int quota;
 
     /**
      * 用户昵称

@@ -102,6 +102,18 @@
             <artifactId>langchain4j-open-ai-spring-boot-starter</artifactId>
             <version>1.11.7-beta19</version>
         </dependency>
+        <!-- langchain4j all-minilm嵌入模型支持 -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-embeddings-all-minilm-l6-v2-q</artifactId>
+            <version>1.11.7-beta19</version>
+        </dependency>
+        <!-- langchain4j bge-small嵌入模型支持 -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-embeddings-bge-small-zh-v15</artifactId>
+            <version>1.14.1-beta24</version>
+        </dependency>
         <!-- langchain4j reactor 支持 -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
@@ -113,6 +125,12 @@
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-community-redis-spring-boot-starter</artifactId>
             <version>1.1.0-beta7</version>
+        </dependency>
+        <!-- langchain4j qdrant 支持 -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-qdrant</artifactId>
+            <version>1.15.0-beta25</version>
         </dependency>
         <!-- caffeine 本地缓存 -->
         <dependency>

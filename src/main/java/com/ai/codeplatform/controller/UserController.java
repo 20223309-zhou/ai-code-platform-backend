@@ -227,8 +227,11 @@ public class UserController {
         if (!userUpdateRequest.getId().equals(userService.getLoginUser(request).getId())){
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
         }
-        User user = new User();
-        BeanUtils.copyProperties(userUpdateRequest, user);
+        User user = User.builder()
+                .id(userUpdateRequest.getId())
+                .userName(userUpdateRequest.getUserName())
+                .userProfile(userUpdateRequest.getUserProfile())
+                .build();
         // 上传头像
         String userAvatar = cosManager.putUserImage(user.getId(), file,"avatar");
         if(userAvatar != null){
