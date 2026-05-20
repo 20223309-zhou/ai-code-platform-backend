@@ -29,6 +29,16 @@ public class LoginUserVO implements Serializable {
     private String userAvatar;
 
     /**
+     * vip
+     */
+    private String vipLevel;
+
+    /**
+     * 剩余额度
+     */
+    private int quota;
+
+    /**
      * 用户简介
      */
     private String userProfile;

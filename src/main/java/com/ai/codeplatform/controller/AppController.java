@@ -17,6 +17,7 @@ import com.ai.codeplatform.manager.CancelGenerationManager;
 import com.ai.codeplatform.model.dto.app.*;
 import com.ai.codeplatform.model.entity.User;
 import com.ai.codeplatform.model.vo.AppVO;
+import com.ai.codeplatform.rag.RagSwitchHolder;
 import com.ai.codeplatform.ratelimiter.annotation.RateLimit;
 import com.ai.codeplatform.ratelimiter.enums.RateLimitType;
 import com.ai.codeplatform.service.*;
@@ -50,6 +51,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/app")
 public class AppController {
+    private static final ThreadLocal<Boolean> threadLocal = new ThreadLocal<>();
 
     @Resource
     private AppService appService;
@@ -139,9 +141,12 @@ public class AppController {
     @PostMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> chatToGenCode(@RequestParam Long appId,
                                                        @RequestParam String message,
+                                                       @RequestParam(required = false) Boolean useRag,
                                                        @RequestPart(value = "files",required = false)
                                                        MultipartFile[] files,
                                                        HttpServletRequest request) {
+        // 保存Rag使用状态
+        RagSwitchHolder.set(useRag != null ? useRag : false);
         // 参数校验
         if (appId == null || appId <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "应用ID无效");

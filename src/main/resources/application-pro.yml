@@ -74,3 +74,11 @@ dashscope:
 #部署路径
 code:
   deploy-path: http://www.icodeplay.site/dist
+
+# Qdrant 向量数据库配置
+qdrant:
+  host: ${QDRANT_URL}
+  port: ${QDRANT_PORT}
+  collection-name: code_embeddings
+  vector-size: 512  # BGE-Small-ZH-V1.5 的向量维度
+  distance-type: Cosine

@@ -17,6 +17,7 @@ import com.ai.codeplatform.core.handler.StreamHandlerExecutor;
 import com.ai.codeplatform.exception.BusinessException;
 import com.ai.codeplatform.exception.ErrorCode;
 import com.ai.codeplatform.manager.CosManager;
+import com.ai.codeplatform.mapper.UserMapper;
 import com.ai.codeplatform.model.dto.app.AppAddRequest;
 import com.ai.codeplatform.model.dto.app.AppQueryRequest;
 import com.ai.codeplatform.model.entity.ChatHistoryOriginal;
@@ -25,6 +26,7 @@ import com.ai.codeplatform.model.enums.ChatHistoryMessageTypeEnum;
 import com.ai.codeplatform.model.enums.CodeGenTypeEnum;
 import com.ai.codeplatform.model.vo.AppVO;
 import com.ai.codeplatform.model.vo.UserVO;
+import com.ai.codeplatform.rag.QdrantDocumentLoader;
 import com.ai.codeplatform.service.*;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
@@ -39,6 +41,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
 
@@ -51,6 +54,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static com.ai.codeplatform.constant.AppConstant.CODE_OUTPUT_ROOT_DIR;
+import static com.ai.codeplatform.constant.RagConstant.RAG_LOAD_DIRECTORY_PATH;
 
 /**
  * 应用 服务层实现。
@@ -62,6 +66,9 @@ import static com.ai.codeplatform.constant.AppConstant.CODE_OUTPUT_ROOT_DIR;
 public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppService {
     @Resource
     private UserService userService;
+
+    @Resource
+    private UserMapper userMapper;
 
     @Resource
     private CosManager cosManager;
@@ -90,8 +97,12 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     @Resource
     private ChatHistoryOriginalService chatHistoryOriginalService;
 
+    @Resource
+    private QdrantDocumentLoader qdrantDocumentLoader;
+
     @Value("${code.deploy-path:http://localhost}")
     private String deployHost;
+
     /**
      * 创建应用
      *
@@ -101,6 +112,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
      * @return
      */
     @Override
+    @Transactional
     public App createApp(AppAddRequest appAddRequest, HttpServletRequest request, String initPrompt) {
         // 获取当前登录用户
         User loginUser = userService.getLoginUser(request);
@@ -113,13 +125,49 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         // ai智能选择代码生成类型
         AiCodeGenTypeRoutingService routingService = aiCodeGenTypeRoutingServiceFactory.createAiCodeGenTypeRoutingService();
         CodeGenTypeEnum selectedCodeGenType = routingService.routeCodeGenType(initPrompt);
-        if (selectedCodeGenType == CodeGenTypeEnum.WARNING){
+        if (selectedCodeGenType == CodeGenTypeEnum.WARNING) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "禁止输入无关的提示词");
         }
-        if (selectedCodeGenType == null){
+        if (selectedCodeGenType == null) {
             selectedCodeGenType = CodeGenTypeEnum.MULTI_FILE;
         }
         app.setCodeGenType(selectedCodeGenType.getValue());
+        // 使用 CAS 方式扣减额度（最多重试 3 次）
+        int maxRetry = 3;
+        boolean success = false;
+        for (int i = 0; i < maxRetry; i++) {
+            // 重新查询最新的用户信息
+            User currentUser = userService.getById(loginUser.getId());
+            if (currentUser == null) {
+                throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "用户不存在");
+            }
+
+            int currentQuota = currentUser.getQuota();
+            // 检查额度是否充足
+            if (currentQuota <= 0) {
+                throw new BusinessException(ErrorCode.OPERATION_ERROR, "额度不足，请充值后再试");
+            }
+
+            // CAS 扣减额度
+            // update user set quota = quota - 1 where id = ? and quota = ?
+            success = userService.updateChain()
+                    .set(User::getQuota, currentQuota - 1)
+                    .set(User::getUpdateTime, LocalDateTime.now())
+                    .where(User::getId).eq(loginUser.getId())
+                    .and(User::getQuota).eq(currentQuota)
+                    .update();
+
+            if (success) {
+                log.info("用户 {} 额度扣减成功，原额度: {}, 新额度: {}", currentUser.getId(), currentQuota, currentQuota - 1);
+                break;
+            } else {
+                log.warn("用户 {} 额度扣减失败（并发冲突），第 {} 次重试", currentUser.getId(), i + 1);
+            }
+        }
+
+        if (!success) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "系统繁忙，请稍后重试");
+        }
         // 插入数据库
         boolean result = save(app);
         if (!result) {
@@ -138,7 +186,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
      * @return
      */
     @Override
-    public Flux<String> chatToGenCode(Long appId, String message, User loginUser, MultipartFile[]  files) {
+    public Flux<String> chatToGenCode(Long appId, String message, User loginUser, MultipartFile[] files) {
         // 1. 参数校验
         if (appId == null || appId <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
@@ -179,7 +227,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
             else if (hasText) intentMessage += " (用户上传了需求文档)";
         }
         boolean designRelated = routingService.isDesignRelated(intentMessage);
-        if (!designRelated){
+        if (!designRelated) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "请提供具体的网页修改需求或功能描述。");
         }
 
@@ -234,9 +282,10 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         // 12. 调用 AI 生成代码（流式）
         Flux<String> codeStream = aiCodeGeneratorFacade.generateAndSaveCodeStream(userMessage, codeGenTypeEnum, appId);
         // 13. 收集 AI 响应内容并在完成后记录到对话历史
-        return streamHandlerExecutor.doExecute(codeStream, chatHistoryService,chatHistoryOriginalService,appId, loginUser, codeGenTypeEnum)
+        return streamHandlerExecutor.doExecute(codeStream, chatHistoryService, chatHistoryOriginalService, appId, loginUser, codeGenTypeEnum)
                 .doFinally(signalType -> cancelGenerationManager.remove(appId));
     }
+
     /**
      * 获取应用视图对象,并封装用户脱敏信息
      *
@@ -377,10 +426,19 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
             sourceDir = distDir;
             log.info("Vue 项目构建成功，将部署 dist 目录: {}", distDir.getAbsolutePath());
         }
-        // 8. 复制文件到部署目录
+        // 8. 复制文件到部署目录和知识库目录
         String deployDirPath = AppConstant.CODE_DEPLOY_ROOT_DIR + File.separator + deployKey;
         try {
             FileUtil.copyContent(sourceDir, new File(deployDirPath), true);
+
+            String filePath = RAG_LOAD_DIRECTORY_PATH + File.separator + codeGenType + "_" + appId;
+            if (!new File(filePath).exists()) {
+                // 把部署文件复制到知识库目录
+                FileUtil.copyContent(new File(sourceDirPath), new File(filePath), true);
+                // 对部署文件做向量转化和存储
+                qdrantDocumentLoader.loadDocuments(filePath);
+                log.info("向量转换成功，转换目录: {}", filePath);
+            }
         } catch (Exception e) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "部署失败：" + e.getMessage());
         }
@@ -390,7 +448,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         updateApp.setDeployKey(deployKey);
         updateApp.setDeployedTime(LocalDateTime.now());
         boolean updateResult = this.updateById(updateApp);
-        if(!updateResult){
+        if (!updateResult) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "更新应用部署信息失败");
         }
         // 10. 构建应用访问 URL
@@ -403,6 +461,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
     /**
      * 使用app模板
+     *
      * @param templateId 模板ID
      * @return 新应用ID
      */
@@ -411,8 +470,8 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         App templateApp = getById(templateId);
         QueryWrapper queryWrapper = QueryWrapper.create().eq(ChatHistoryOriginal::getAppId, templateId);
         List<ChatHistoryOriginal> chatHistoryOriginals = chatHistoryOriginalService.list(queryWrapper);
-        if (chatHistoryOriginals.isEmpty()){
-            log.error("模板没有会话历史，appId：{}",templateApp);
+        if (chatHistoryOriginals.isEmpty()) {
+            log.error("模板没有会话历史，appId：{}", templateApp);
         }
         if (templateApp == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "模板不存在");
@@ -432,7 +491,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         app.setDeployedTime(null);
         app.setPriority(0);
         boolean isSuccess = save(app);
-        if (!isSuccess){
+        if (!isSuccess) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "模板使用失败");
         }
         for (ChatHistoryOriginal h : chatHistoryOriginals) {
@@ -446,7 +505,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         chatHistoryOriginalService.saveBatch(chatHistoryOriginals);
         try {
             FileUtil.copyContent(new File(CODE_OUTPUT_ROOT_DIR +
-                    File.separator + templateApp.getCodeGenType() + "_" + templateApp.getId()),
+                            File.separator + templateApp.getCodeGenType() + "_" + templateApp.getId()),
                     new File(CODE_OUTPUT_ROOT_DIR +
                             File.separator + app.getCodeGenType() + "_" + app.getId()), true);
         } catch (IORuntimeException e) {
@@ -472,7 +531,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
             updateApp.setId(appId);
             updateApp.setCover(screenshotUrl);
             boolean updated = this.updateById(updateApp);
-            if (!updated){
+            if (!updated) {
                 throw new BusinessException(ErrorCode.OPERATION_ERROR, "更新应用封面字段失败");
             }
         });

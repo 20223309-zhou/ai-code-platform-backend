@@ -18,6 +18,16 @@ public class UserUpdateRequest implements Serializable {
     private String userName;
 
     /**
+     * vip
+     */
+    private String vipLevel;
+
+    /**
+     * 使用配额
+     */
+    private Integer quota;
+
+    /**
      * 用户头像
      */
     private String userAvatar;
