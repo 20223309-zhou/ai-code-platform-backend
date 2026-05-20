@@ -1,8 +1,8 @@
 # iCodeAI — AI 驱动的应用生成平台
 
-iCodeAI 是一个基于 **Langchain4j + Spring Boot + Vue 3 + 大模型能力** 构建的智能应用生成平台。
+iCodeAI  是一个基于 **Langchain4j + RAG + Qdrant + Spring Boot + Vue 3 + 大模型能力** 构建的智能应用生成平台。
 
-<img width="2560" height="1199" alt="image-20260517141948477" src="https://github.com/user-attachments/assets/3d80d521-1041-4a72-8d2c-f52f5de784a4" />
+<img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/9ef2989b-b1b6-4edd-94ee-6b65e83365e3" />
 
 
 用户可以通过自然语言描述需求，快速生成网页应用原型，并继续通过对话方式迭代修改。平台同时支持上传图片/文本文件作为参考资料、预览生成结果、下载源码、部署应用、模板复用以及后台管理等功能。
@@ -20,10 +20,12 @@ iCodeAI 是一个基于 **Langchain4j + Spring Boot + Vue 3 + 大模型能力** 
 - 支持图片、文本文件作为生成参考
 - 支持流式返回 AI 生成过程
 - 支持多轮对话式迭代修改
-- 支持停止生成任务
+- 支持停止生成任务（源头截断 AI 输出）
 - 支持应用预览、代码下载、应用部署
 - 支持模板广场与模板复用
 - 支持管理员后台管理用户、应用、对话、日志和统计
+- 支持 **RAG 知识库检索**——已部署的模板代码作为参考语料，提升生成一致性
+- 支持 VIP 会员体系——等级管理 + 使用额度控制
 
 ---
 
@@ -36,21 +38,23 @@ iCodeAI 是一个基于 **Langchain4j + Spring Boot + Vue 3 + 大模型能力** 
 - 通过首页输入需求创建应用
 - 上传图片、文本文件作为生成参考资料
 - 支持直接粘贴截图到输入区域
-- 查看“我的作品”
+- 查看”我的作品”
 - 在应用对话页继续与 AI 交互
 - 停止当前生成任务
 - 预览生成结果
 - 下载应用源码
 - 一键部署应用
 - 浏览模板广场并复用模板
+- 用户个人中心展示 VIP 等级及剩余使用额度
+- 对话页支持 **RAG 知识库开关**，按需开启/关闭模板参考
 
 ### 管理后台功能
 
-- 用户管理
+- 用户管理（含 VIP 等级编辑、额度调整）
 - 应用管理
 - 对话管理
 - 日志管理
-- 数据统计
+- 数据统计（含创作趋势、活跃用户等可视化图表）
 
 ### AI 与生成能力
 
@@ -60,6 +64,16 @@ iCodeAI 是一个基于 **Langchain4j + Spring Boot + Vue 3 + 大模型能力** 
 - 支持生成结果解析与文件落盘
 - 支持 Vue 项目构建
 - 支持生成应用封面截图
+- **RAG 知识库检索**：
+  - 已部署项目自动入库，按文件类型（Vue/HTML/JS/CSS）分割索引
+  - 支持 `bge-small-zh-v1.5` 中文嵌入模型
+  - 支持 `ConditionalContentRetriever` 运行时动态开关
+  - 知识库可持久化（`InMemoryEmbeddingStore` 文件序列化 / Qdrant 向量数据库）
+- **Function Calling 工具调用**：
+  - `FileReadTool` / `FileModifyTool`：修改场景直接操作文件系统，避免全量重生成
+  - `WebFetchTool`：AI 主动获取外部网页参考样式
+- **流式取消**：`StreamingHandle.cancel()` 源头截断，停止 AI 生成并终止计费
+- **输入安全护轨**：Prompt 注入检测与过滤
 
 ---
 
@@ -67,16 +81,18 @@ iCodeAI 是一个基于 **Langchain4j + Spring Boot + Vue 3 + 大模型能力** 
 
 ### 后端
 
-| 技术         | 版本                          |
-| ------------ | ----------------------------- |
-| Java         | 21                            |
-| Spring Boot  | 3.5.4                         |
-| MyBatis-Flex | 1.11.0                        |
-| LangChain4j  | 1.11.7                        |
-| MySQL        | 8.x                           |
-| Redis        | (session / cache / AI memory) |
-| Hutool       | 5.8.38                        |
-| Knife4j      | 4.4.0                         |
+| 技术         | 版本                           |
+| ------------ | ------------------------------ |
+| Java         | 21                             |
+| Spring Boot  | 3.5.4                          |
+| MyBatis-Flex | 1.11.0                         |
+| LangChain4j  | 1.11.7                         |
+| MySQL        | 8.x                            |
+| Redis        | (session / cache / AI memory)  |
+| Hutool       | 5.8.38                         |
+| Knife4j      | 4.4.0                          |
+| Qdrant       | 1.17.0 (向量数据库)            |
+| 嵌入模型     | BAAI bge-small-zh-v1.5 (512维) |
 
 ### 前端
 
@@ -113,6 +129,7 @@ ai_code_platform_project/
 │  │  ├─ constant/          # 常量
 │  │  ├─ controller/        # 控制器
 │  │  ├─ core/              # 代码生成、解析、保存、构建等核心逻辑
+│  ├─ rag/               # RAG 知识库（分割器、文档加载、向量存储、检索器）
 │  │  ├─ exception/         # 异常处理
 │  │  ├─ manager/           # 管理器（如 COS、取消生成等）
 │  │  ├─ mapper/            # 数据访问层
@@ -174,6 +191,7 @@ ai_code_platform_project/
 - npm
 - MySQL 8.x
 - Redis 6.x / 7.x
+- Qdrant 1.17（可选，可用 InMemory 回退）
 
 如果你要完整运行截图、部署、对象存储等能力，还需要准备：
 
@@ -316,54 +334,54 @@ npm run build-only
 
 - 首页：输入需求、上传参考资料、查看我的作品
 
-  <img width="2560" height="1199" alt="image-20260517141948477" src="https://github.com/user-attachments/assets/e33e63a5-dfba-45b9-9c60-499503a188ec" />
+  <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/6c308814-7631-42cc-97bc-0b336079c5e4" />
 
 
 - 登录页：账号密码 + 验证码登录
 
-  <img width="2560" height="1199" alt="image-20260517142241164" src="https://github.com/user-attachments/assets/be211c5c-a8e2-4756-ba73-7bb9ea98582d" />
+  <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/de195358-fef5-40dd-96b9-b937284f40cb" />
 
 
 - 注册页：用户注册
 
-  <img width="2560" height="1199" alt="image-20260517142300084" src="https://github.com/user-attachments/assets/164db93e-2541-4ab9-adbe-ade6d939e387" />
+  <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/1c9142ec-f142-4466-a666-f56e30459a10" />
 
 
 - 个人中心：查看与修改个人资料
 
-  <img width="2560" height="1199" alt="image-20260517142323339" src="https://github.com/user-attachments/assets/6e24e18b-1a1c-4962-b09f-406fb4c63c4a" />
+  <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/1954aa22-d27d-46a1-b5b7-6dc1cbaaf113" />
 
 
 - 应用对话页：继续生成、上传附件、停止生成、部署、下载、预览
 
-  <img width="2560" height="1199" alt="image-20260517142351449" src="https://github.com/user-attachments/assets/f6fcfa12-51eb-4b33-99d7-1a887328d058" />
+  <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/ef3fad4f-c02c-4cb4-966d-982222ef43e7" />
 
 
 - 模板广场：查看精选模板并复用
 
-  <img width="2560" height="1199" alt="image-20260517142414309" src="https://github.com/user-attachments/assets/b42079b6-4de4-44e7-a7c3-44f810ff6898" />
+ <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/370a8ada-a772-438f-b4fa-01fa48f18b93" />
 
 
 ### 后台页面
 
 - 用户管理
 
-  <img width="2560" height="1199" alt="image-20260517142435968" src="https://github.com/user-attachments/assets/b9e8f1fb-2817-449f-ad61-34373711e93d" />
+  <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/35bc14cf-2bf9-489b-8c9f-06053027a18c" />
 
 
 - 应用管理
 
-  <img width="2560" height="1199" alt="image-20260517142452134" src="https://github.com/user-attachments/assets/82ab0c5d-5166-4e87-af41-efb1ed04f617" />
+ <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/fd58de41-2b3c-4548-8115-d9ed545f5950" />
 
 
 - 日志管理
 
-  <img width="2560" height="1199" alt="image-20260517142517393" src="https://github.com/user-attachments/assets/d30c5226-4b25-49aa-ab27-4db0c2644463" />
+  <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/350afd0f-9d3c-4fb0-8475-a69c3d7257d7" />
 
 
 - 统计页面
 
-  <img width="2560" height="1199" alt="image-20260517142525593" src="https://github.com/user-attachments/assets/1eba98cd-9f20-4c16-a56d-84c6fcdf15e0" />
+  <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/8190c79c-f8f3-4d14-bf27-4f911150f044" />
 
 
 ---
@@ -372,10 +390,10 @@ npm run build-only
 
 后端核心控制器包括：
 
-- `UserController`：注册、登录、验证码、个人信息
-- `AppController`：应用创建、AI 对话生成、取消生成、下载、部署、模板复用
+- `UserController`：注册、登录、验证码、个人信息、VIP 等级与额度
+- `AppController`：应用创建、AI 对话生成（含 `useRag` 参数）、取消生成、下载、部署、模板复用
 - `ChatHistoryController`：对话历史查询
-- `StatisticsController`：统计数据
+- `StatisticsController`：统计数据（创作趋势、成功率、活跃用户等）
 - `OperationLogController`：日志相关
 
 ---
