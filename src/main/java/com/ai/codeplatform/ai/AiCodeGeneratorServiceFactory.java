@@ -5,9 +5,7 @@ import com.ai.codeplatform.ai.tools.*;
 import com.ai.codeplatform.exception.BusinessException;
 import com.ai.codeplatform.exception.ErrorCode;
 import com.ai.codeplatform.model.enums.CodeGenTypeEnum;
-import com.ai.codeplatform.rag.config.ConditionalContentRetriever;
 import com.ai.codeplatform.service.ChatHistoryOriginalService;
-import com.ai.codeplatform.service.ChatHistoryService;
 import com.ai.codeplatform.utils.SpringContextUtil;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
@@ -17,14 +15,15 @@ import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.rag.RetrievalAugmentor;
-import dev.langchain4j.rag.content.retriever.EmbeddingStoreContentRetriever;
 import dev.langchain4j.service.AiServices;
+import dev.langchain4j.skills.Skills;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.time.Duration;
+
 @Slf4j
 @Configuration
 public class AiCodeGeneratorServiceFactory {
@@ -43,6 +42,9 @@ public class AiCodeGeneratorServiceFactory {
 
     @Resource
     private RetrievalAugmentor retrievalAugmentor;
+
+    @Resource
+    private Skills skills;
     /**
      * AI 服务实例缓存
      */
@@ -50,6 +52,7 @@ public class AiCodeGeneratorServiceFactory {
             .maximumSize(1000)
             .expireAfterWrite(Duration.ofMinutes(30))
             .expireAfterAccess(Duration.ofMinutes(10))
+            //记录缓存淘汰日志
             .removalListener((key, value, cause) -> {
                 log.debug("AI 服务实例被移除，缓存键: {}, 原因: {}", key, cause);
             })
@@ -93,9 +96,11 @@ public class AiCodeGeneratorServiceFactory {
                 yield AiServices.builder(AiCodeGeneratorService.class)
                         .streamingChatModel(reasoningStreamingChatModel)
                         .retrievalAugmentor(retrievalAugmentor)
+                        .toolProvider(skills.toolProvider())
                         .chatMemoryProvider(memoryId -> chatMemory)
                         .tools(toolManager.getAllTools())
-                        .inputGuardrails(new PromptSafetyInputGuardrail())// 添加输入护轨
+                        // 添加输入护轨
+                        .inputGuardrails(new PromptSafetyInputGuardrail())
                         .hallucinatedToolNameStrategy(toolExecutionRequest -> ToolExecutionResultMessage.from(
                                 toolExecutionRequest, "Error: there is no tool called " + toolExecutionRequest.name()
                         ))
@@ -106,11 +111,13 @@ public class AiCodeGeneratorServiceFactory {
                 StreamingChatModel openAiStreamingChatModel = SpringContextUtil.getBean("streamingChatModelPrototype", StreamingChatModel.class);
                 yield AiServices.builder(AiCodeGeneratorService.class)
                         .chatModel(chatModel)
+                        .toolProvider(skills.toolProvider())
                         .streamingChatModel(openAiStreamingChatModel)
                         .retrievalAugmentor(retrievalAugmentor)
                         .chatMemoryProvider(memoryId -> chatMemory)
                         .tools(new WebFetchTool(),new FileReadTool(),new FileModifyTool())
-                        .inputGuardrails(new PromptSafetyInputGuardrail())// 添加输入护轨
+                        // 添加输入护轨
+                        .inputGuardrails(new PromptSafetyInputGuardrail())
                         .build();
             }
             default -> throw new BusinessException(ErrorCode.SYSTEM_ERROR,

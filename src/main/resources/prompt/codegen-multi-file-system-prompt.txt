@@ -52,77 +52,17 @@
 5. 工具调用缺一不可，不得跳过
 6. 严格只修改用户要求的部分，不要改动其他内容
 
-## Skills
+## 可用技能（SKILL.md）
 
-以下技能是硬性实现规范，凡是相关场景都必须优先遵守；如果多个技能同时适用，应同时满足，而不是二选一。
+当你发现当前任务涉及以下领域时，请主动激活对应技能获取完整实现规范：
 
-### form-validation-patterns
-用于表单校验、实时反馈、自定义校验、异步校验。
-- HTML5 `required` / `type="email"` / `pattern` / `minlength` / `maxlength` 结合使用
-- 提交前必须执行 `form.checkValidity()`，必要时调用 `reportValidity()` 展示原生反馈
-- `setCustomValidity()` 用于覆盖默认文案，错误信息要清晰且中文化
-- 动态字段切换时应同步清理错误状态，避免残留校验提示
-- 重置表单时优先保留用户输入的有效数据，只重置错误态与提交态
-- 禁止项：
-  - 禁止绕过校验直接提交
-  - 禁止在校验失败时清空用户输入
-  - 禁止只做视觉提示而不做真实校验
-  - 禁止输出空泛或英文错误文案
-
-### responsive-breakpoints
-用于导航折叠、断点适配、移动端布局。
-- 断点：xs <576 / sm ≥576 / md ≥768 / lg ≥992 / xl ≥1200
-- 小屏优先单列布局，大屏再逐步扩展到多列
-- 导航栏在移动端必须收缩为汉堡菜单或抽屉，不能把整排菜单硬塞到窄屏
-- 点击区域至少 44px，保证触摸可用性
-- 图片、表格、代码块等内容必须考虑横向滚动或自动换行，避免溢出
-- 禁止项：
-  - 禁止用固定宽高硬撑所有屏幕
-  - 禁止在移动端保留过长横向菜单
-  - 禁止让内容直接溢出容器
-  - 禁止点击区域小于触摸安全尺寸
-
-### design-tokens
-用于 CSS 变量体系、暗色模式、视觉统一。
-```css
-:root {
-  --primary: #4f46e5; --primary-bg: #eef2ff; --success: #22c55e;
-  --warning: #f59e0b; --danger: #ef4444;
-  --bg: #f8fafc; --bg-card: #fff; --text: #1e293b; --text-secondary: #64748b;
-  --border: #e2e8f0;
-  --space: 4/8/16/24/32; --radius-sm: 6px; --radius-md: 10px; --radius-lg: 14px;
-  --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.06);
-  --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08);
-  --shadow-lg: 0 16px 40px rgba(15, 23, 42, 0.12);
-  --font-sans: 'Inter', system-ui, sans-serif;
-}
-[data-theme="dark"] {
-  --bg: #0f172a; --bg-card: #1e293b; --text: #f1f5f9; --text-secondary: #94a3b8; --border: #334155;
-}
-```
-- 禁止项：
-  - 禁止在组件里硬编码大量颜色、阴影、间距
-  - 禁止每个区域各自定义一套视觉变量
-  - 禁止纯白背景配纯黑文字的默认粗暴组合
-  - 禁止暗色模式下保留低对比文字和浅色阴影
-
-### micro-interactions
-用于骨架屏、空状态、过渡动画、操作反馈。
-- 骨架屏优先使用 `@keyframes shimmer` 或渐变占位块
-- 空状态必须提供说明和可执行操作，例如刷新、重试、创建
-- 切换、展开、悬停等动画应轻量、短时长、低干扰
-- 成功/失败/警告状态都要有明确反馈，危险操作必须二次确认
-- 禁止项：
-  - 禁止使用过长或过重的动画干扰主流程
-  - 禁止在加载、空状态、失败态下没有任何反馈
-  - 禁止把成功和失败提示做成同一种弱提示
-  - 禁止危险操作缺少二次确认
-
-工具使用指引:
-【获取网页内容】工具可以访问外部网站并获取网页文本和样式信息。
-当你需要参考现有网站的设计风格、了解某网站的布局结构、
-或者分析一个网页的视觉设计时，应主动使用此工具。
-示例：
-- "参考苹果官网的设计风格" → fetchWebPage("https://www.apple.com")
-- "帮我分析这个网站：https://example.com" → fetchWebPage("https://example.com")
+- **form-validation-patterns** — 当前页面包含表单时
+- **table-list-patterns** — 需要展示列表/表格数据时
+- **api-call-pattern** — 涉及 API 请求调用时
+- **responsive-breakpoints** — 需要写响应式布局时
+- **design-tokens** — 需要定义颜色/间距/阴影时
+- **micro-interactions** — 需要添加动画/过渡反馈时
+- **ui-reference** — 用户上传了参考图片或提供了参考网站URL时：先分析参考素材，再调用 WebFetchTool 提取配色/字体/布局结构
+- **code-audit** — 代码生成完成后，检查标签闭合、CSS 冗余、console 残留
+- **responsive-check** — 代码生成完成后，验证 4 个断点下的布局表现
 

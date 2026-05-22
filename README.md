@@ -17,14 +17,15 @@ iCodeAI  是一个基于 **Langchain4j + RAG + Qdrant + Spring Boot + Vue 3 + �
 ## 项目特色
 
 - 自然语言驱动的应用生成
-- 支持图片、文本文件作为生成参考
+- 支持多模态识别，支持图片、文本文件作为生成参考
+- 支持 **RAG 知识库检索**——已部署的模板代码作为参考语料，提升生成一致性和成功率
+- 支持 **Function Calling 工具调用**——AI 自动调用文件读写、网页获取等工具，实现更智能的代码生成
 - 支持流式返回 AI 生成过程
 - 支持多轮对话式迭代修改
 - 支持停止生成任务（源头截断 AI 输出）
 - 支持应用预览、代码下载、应用部署
 - 支持模板广场与模板复用
 - 支持管理员后台管理用户、应用、对话、日志和统计
-- 支持 **RAG 知识库检索**——已部署的模板代码作为参考语料，提升生成一致性
 - 支持 VIP 会员体系——等级管理 + 使用额度控制
 
 ---
@@ -70,8 +71,9 @@ iCodeAI  是一个基于 **Langchain4j + RAG + Qdrant + Spring Boot + Vue 3 + �
   - 支持 `ConditionalContentRetriever` 运行时动态开关
   - 知识库可持久化（`InMemoryEmbeddingStore` 文件序列化 / Qdrant 向量数据库）
 - **Function Calling 工具调用**：
-  - `FileReadTool` / `FileModifyTool`：修改场景直接操作文件系统，避免全量重生成
-  - `WebFetchTool`：AI 主动获取外部网页参考样式
+  - **文件系统操作**：`FileReadTool` / `FileModifyTool` / `FileWriteTool` ——AI 直接读写和修改代码文件，避免全量重生成
+  - **网页内容获取**：`WebFetchTool` ——AI 主动访问外部网站参考设计风格和布局
+  - **Skills 技能系统**：通过 `activate_skill` 动态加载设计规范、最佳实践，提升代码质量
 - **流式取消**：`StreamingHandle.cancel()` 源头截断，停止 AI 生成并终止计费
 - **输入安全护轨**：Prompt 注入检测与过滤
 
@@ -112,6 +114,7 @@ iCodeAI  是一个基于 **Langchain4j + RAG + Qdrant + Spring Boot + Vue 3 + �
 | ------------------- | ---------------------------- |
 | 代码生成 / 工具调用 | DeepSeek `deepseek-v4-flash` |
 | 路由分类 / 意图识别 | Qwen-turbo                   |
+| 嵌入模型            | BAAI bge-small-zh-v1.5       |
 
 ---
 

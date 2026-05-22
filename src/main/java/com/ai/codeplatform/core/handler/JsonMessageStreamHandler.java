@@ -122,8 +122,17 @@ public class JsonMessageStreamHandler {
                     seenToolIds.add(toolId);
                     // 获取工具实例
                     BaseTool tool = toolManager.getTool(toolName);
-                    // 返回格式化的工具调用信息
-                    return tool.generateToolRequestResponse();
+                    if (tool != null) {
+                        return tool.generateToolRequestResponse();
+                    }
+                    else if("activate_skill".equals(toolName)){
+                        return String.format("\n\n\uD83D\uDEE0\uFE0F[选择工具] %s\n\n", "激活Skill");
+                    }else if("read_skill_resource".equals(toolName)){
+                        return String.format("\n\n\uD83D\uDEE0\uFE0F[选择工具] %s\n\n", "使用Skill");
+                    }else {
+                        log.warn("未找到对应的工具: {}, 跳过处理", toolName);
+                        return String.format("\n\n⚠️[未知工具] %s\n\n", toolName);
+                    }
                 } else {
                     // 不是第一次调用这个工具，直接返回空
                     return "";
@@ -138,11 +147,25 @@ public class JsonMessageStreamHandler {
                 JSONObject arguments = JSONUtil.parseObj(toolExecutedMessage.getArguments());
                 // 根据工具名称获取工具实例并生成格式化输出信息
                 BaseTool tool = toolManager.getTool(toolName);
-                String result = tool.generateToolExecutedResult(arguments);
-                // 输出前端和要持久化的内容
-                String output = String.format("\n\n%s\n\n", result);
-                chatHistoryStringBuilder.append(output);
-                return output;
+                if (tool != null){
+                    String result = tool.generateToolExecutedResult(arguments);
+                    // 输出前端和要持久化的内容
+                    String output = String.format("\n\n%s\n\n", result);
+                    chatHistoryStringBuilder.append(output);
+                    return output;
+                }else if("activate_skill".equals(toolName)){
+                    return String.format("\n\n\uD83D\uDD0C[工具调用] %s%s\n\n", "使用Skill：",arguments.get("skill_name"));
+                }else if("read_skill_resource ".equals(toolName)){
+                    if (StrUtil.isNotBlank(arguments.get("relative_path").toString())){
+                        return String.format("\n\n\uD83D\uDCBC[工具调用] %s%s/%s\n\n", "阅读Skill.md中：",arguments.get("skill_name"),arguments.get("relative_path"));
+                    }
+                    return String.format("\n\n\uD83D\uDCBC[工具调用] %s%s\n\n", "调用Skill：",arguments.get("skill_name"));
+                }else {
+                    log.warn("未找到对应的工具: {}, 使用默认格式化", toolName);
+                    String output = String.format("\n\n⚠️[工具执行结果] %s\n参数: %s\n", toolName, arguments);
+                    chatHistoryStringBuilder.append(output);
+                    return output;
+                }
             }
             case THINKING -> {
                 // 推理过程：直接透传原始 JSON，前端自行解析渲染

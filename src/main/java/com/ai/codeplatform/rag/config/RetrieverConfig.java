@@ -30,7 +30,7 @@ public class RetrieverConfig {
                 .embeddingModel(embeddingModel)
                 .embeddingStore(embeddingStore)
                 .maxResults(5)
-                .minScore(0.7)
+                .minScore(0.6)
                 .displayName("retriever")
                 .build();
     }

@@ -433,11 +433,17 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
             String filePath = RAG_LOAD_DIRECTORY_PATH + File.separator + codeGenType + "_" + appId;
             if (!new File(filePath).exists()) {
-                // 把部署文件复制到知识库目录
-                FileUtil.copyContent(new File(sourceDirPath), new File(filePath), true);
-                // 对部署文件做向量转化和存储
-                qdrantDocumentLoader.loadDocuments(filePath);
-                log.info("向量转换成功，转换目录: {}", filePath);
+                Thread.startVirtualThread(() ->{
+                    try {
+                        // 把部署文件复制到知识库目录
+                        FileUtil.copyContent(new File(sourceDirPath), new File(filePath), true);
+                        // 对部署文件做向量转化和存储
+                        qdrantDocumentLoader.loadDocuments(filePath);
+                        log.info("向量转换成功，转换目录: {}", filePath);
+                    } catch (IORuntimeException e) {
+                        log.error("向量转换失败，转换目录: {}", filePath);
+                    }
+                });
             }
         } catch (Exception e) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "部署失败：" + e.getMessage());
