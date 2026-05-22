@@ -94,31 +94,25 @@
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j</artifactId>
-            <version>1.11.7</version>
+            <version>1.15.0</version>
         </dependency>
         <!-- spring langchain4j 依赖支持 -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-open-ai-spring-boot-starter</artifactId>
-            <version>1.11.7-beta19</version>
-        </dependency>
-        <!-- langchain4j all-minilm嵌入模型支持 -->
-        <dependency>
-            <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j-embeddings-all-minilm-l6-v2-q</artifactId>
-            <version>1.11.7-beta19</version>
+            <version>1.15.0-beta25</version>
         </dependency>
         <!-- langchain4j bge-small嵌入模型支持 -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-embeddings-bge-small-zh-v15</artifactId>
-            <version>1.14.1-beta24</version>
+            <version>1.15.0-beta25</version>
         </dependency>
         <!-- langchain4j reactor 支持 -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-reactor</artifactId>
-            <version>1.11.7-beta19</version>
+            <version>1.15.0-beta25</version>
         </dependency>
         <!-- langchain4j整合 redis -->
         <dependency>
@@ -165,6 +159,12 @@
             <groupId>org.bsc.langgraph4j</groupId>
             <artifactId>langgraph4j-core</artifactId>
             <version>1.6.0-rc2</version>
+        </dependency>
+        <!-- langchain4j Skills -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-skills</artifactId>
+            <version>1.15.0-beta25</version>
         </dependency>
         <!-- 阿里云 DashScope SDK -->
         <dependency>
