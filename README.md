@@ -88,7 +88,7 @@ iCodeAI  是一个基于 **Langchain4j + RAG + Qdrant + Spring Boot + Vue 3 + �
 | Java         | 21                             |
 | Spring Boot  | 3.5.4                          |
 | MyBatis-Flex | 1.11.0                         |
-| LangChain4j  | 1.11.7                         |
+| LangChain4j  | 1.15.0                         |
 | MySQL        | 8.x                            |
 | Redis        | (session / cache / AI memory)  |
 | Hutool       | 5.8.38                         |
