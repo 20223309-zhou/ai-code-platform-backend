@@ -1,4 +1,12 @@
 # iCodeAI — AI 驱动的应用生成平台
+![Java](https://img.shields.io/badge/Java-ED8B00?style=for-the-badge&logo=java&logoColor=white)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot-6DB33F?style=for-the-badge&logo=springboot&logoColor=white)
+![LangChain4j](https://img.shields.io/badge/LangChain4j-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)
+![Qdrant](https://img.shields.io/badge/Qdrant-EE3664?style=for-the-badge&logo=qdrant&logoColor=white)
+![MySQL](https://img.shields.io/badge/MySQL-4479A1?style=for-the-badge&logo=mysql&logoColor=white)
+![Vue.js](https://img.shields.io/badge/Vue.js-4FC08D?style=for-the-badge&logo=vuedotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
+
 
 iCodeAI  是一个基于 **Langchain4j + RAG + Qdrant + Spring Boot + Vue 3 + 大模型能力** 构建的智能应用生成平台。
 
@@ -147,7 +155,7 @@ ai_code_platform_project/
 │  │  ├─ application-pro.yml
 │  │  ├─ mapper/
 │  │  └─ prompt/
-│  ├─ sql/
+│  ├─ sql/                  # 建表语句
 │  └─ tmp/                  # 生成代码、构建输出、部署等中间目录
 │
 ├─ ai-code-platform-frontend/
@@ -162,8 +170,6 @@ ai_code_platform_project/
 │  │  └─ utils/
 │  ├─ public/
 │  └─ vite.config.ts
-│
-└─ ai_code_platform.sql     # 数据库初始化脚本
 ```
 
 ---
@@ -246,12 +252,12 @@ ai_code_platform_project/
 
 项目根目录提供了数据库脚本：
 
-- [ai_code_platform.sql](G:\JAVA\project\ai_code_platform_project\ai_code_platform.sql)
+- [create_table.sql]
 
 初始化步骤如下：
 
 1. 创建数据库，例如：`ai_code_platform`
-2. 执行 SQL 脚本 `ai_code_platform.sql`
+2. 执行 SQL 脚本 `create_table.sql.sql`
 3. 修改后端 `application-dev.yml` 中的数据源连接配置
 
 ---
@@ -342,17 +348,15 @@ npm run build-only
 
 - 登录页：账号密码 + 验证码登录
 
-  <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/de195358-fef5-40dd-96b9-b937284f40cb" />
-
+ <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/495eb7b3-070e-4616-bbe1-2f0445b7fb70" />
 
 - 注册页：用户注册
 
-  <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/1c9142ec-f142-4466-a666-f56e30459a10" />
-
+  <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/4206e3ce-a2e3-4e92-8b20-68183c402bc6" />
 
 - 个人中心：查看与修改个人资料
 
-  <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/1954aa22-d27d-46a1-b5b7-6dc1cbaaf113" />
+ <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/55afe40c-6ba5-4df6-a691-dbf08758305e" />
 
 
 - 应用对话页：继续生成、上传附件、停止生成、部署、下载、预览
@@ -362,7 +366,7 @@ npm run build-only
 
 - 模板广场：查看精选模板并复用
 
- <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/370a8ada-a772-438f-b4fa-01fa48f18b93" />
+ <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/8aa76679-2bdf-4fbc-8756-c38dddde70bf" />
 
 
 ### 后台页面
