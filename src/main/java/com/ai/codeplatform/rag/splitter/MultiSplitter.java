@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
 import static java.util.regex.Pattern.CASE_INSENSITIVE;
 
 @Component
-public class MultiSplitter {
+public class MultiSplitter implements CodeSplitter{
     @Resource
     private ChatModel routingChatModelPrototype;
 
@@ -26,6 +26,7 @@ public class MultiSplitter {
      * @param content
      * @return
      */
+    @Override
     public List<TextSegment> chunk(String filePath, String content) {
         List<TextSegment> chunks = new ArrayList<>();
         // 多文件模式一个文件直接作为一个块

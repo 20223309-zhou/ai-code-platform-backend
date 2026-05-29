@@ -535,5 +535,33 @@ public class AppController {
         }
     }
 
+    /**
+     * 获取个人用户应用的统计信息
+     * @param request 请求
+     * @return 统计信息
+     */
+    @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
+    @GetMapping("/my/statistics")
+    public BaseResponse<Map<String, Object>> getMyStatistics(HttpServletRequest request) {
+        User loginUser = userService.getLoginUser(request);
+
+        // 查询用户的应用总数
+        long totalApps = appService.queryChain()
+                .eq(App::getUserId, loginUser.getId())
+                .count();
+
+        // 查询已部署的应用数
+        long deployedApps = appService.queryChain()
+                .eq(App::getUserId, loginUser.getId())
+                .isNotNull(App::getDeployKey)
+                .count();
+
+        return ResultUtils.success(Map.of(
+                "totalApps", totalApps,
+                "deployedApps", deployedApps,
+                "remainingQuota", loginUser.getQuota()
+        ));
     }
+
+}
 

@@ -16,7 +16,7 @@ import java.util.regex.Pattern;
 import static java.util.regex.Pattern.CASE_INSENSITIVE;
 
 @Component
-public class VueSplitter {
+public class VueSplitter implements CodeSplitter {
     @Resource
     private ChatModel routingChatModelPrototype;
 
@@ -34,6 +34,7 @@ public class VueSplitter {
      * @param content
      * @return
      */
+    @Override
     public List<TextSegment> chunk(String filePath, String content) {
         List<TextSegment> chunks = new ArrayList<>();
 

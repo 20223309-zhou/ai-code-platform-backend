@@ -1,4 +1,14 @@
 spring:
+  security:
+    #登录配置
+    oauth2:
+      client:
+        registration:
+          github:
+            client-id: ${GITHUB_CLIENT_ID}
+            client-secret: ${GITHUB_CLIENT_SECRET}
+            scope: read:user
+            redirect-uri: ${FRONTEND_HOME_PAGE_URL}/api/login/oauth2/code/github
   #数据库配置
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -24,7 +34,7 @@ langchain4j:
       api-key: ${AI_API_KEY}
       model-name: ${AI_MODEL_NAME}
       max-tokens: 62768
-      temperature: 0.1
+      temperature: 0.7
       log-requests: false
       log-responses: true
     # 智能路由 AI 模型配置（用于简单的分类任务）
@@ -33,6 +43,7 @@ langchain4j:
       api-key: ${ROUTING_AI_API_KEY}
       model-name: ${ROUTING_AI_MODEL_NAME}
       max-tokens: 100
+      temperature: 0.7
       log-requests: false
       log-responses: false
     chat-model:
@@ -82,3 +93,7 @@ qdrant:
   collection-name: code_embeddings
   vector-size: 512  # BGE-Small-ZH-V1.5 的向量维度
   distance-type: Cosine
+# 生产地址
+frontend:
+  homePageUrl: ${FRONTEND_HOME_PAGE_URL}
+  authUrl: ${FRONTEND_AUTH_URL}

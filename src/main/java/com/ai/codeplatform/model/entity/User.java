@@ -45,6 +45,12 @@ public class User implements Serializable {
     private String userAccount;
 
     /**
+     * GitHub ID（用于 OAuth 登录）
+     */
+    @Column("githubId")
+    private Long githubId;
+
+    /**
      * 密码
      */
     @Column("userPassword")
