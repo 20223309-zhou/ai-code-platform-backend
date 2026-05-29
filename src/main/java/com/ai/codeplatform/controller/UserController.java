@@ -18,7 +18,6 @@ import com.mybatisflex.core.paginate.Page;
 import com.wf.captcha.SpecCaptcha;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.beans.BeanUtils;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
 import com.ai.codeplatform.model.entity.User;
@@ -147,6 +146,7 @@ public class UserController {
         BeanUtil.copyProperties(userAddRequest, user);
         // 默认密码 12345678
         final String DEFAULT_PASSWORD = "12345678";
+        // 为新用户默认密码加盐
         String encryptPassword = userService.getEncryptPassword(DEFAULT_PASSWORD);
         user.setUserPassword(encryptPassword);
         boolean result = userService.save(user);

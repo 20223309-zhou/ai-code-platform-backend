@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
 import static java.util.regex.Pattern.CASE_INSENSITIVE;
 
 @Component
-public class HtmlSplitter {
+public class HtmlSplitter implements CodeSplitter{
     @Resource
     private ChatModel routingChatModelPrototype;
 
@@ -31,6 +31,7 @@ public class HtmlSplitter {
      * @param content
      * @return
      */
+    @Override
     public List<TextSegment> chunk(String filePath, String content) {
         List<TextSegment> chunks = new ArrayList<>();
 

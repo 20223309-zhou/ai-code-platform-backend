@@ -1,6 +1,4 @@
 package com.ai.codeplatform.rag.splitter;
-
-import com.ai.codeplatform.constant.AppConstant;
 import com.ai.codeplatform.constant.RagConstant;
 import dev.langchain4j.data.segment.TextSegment;
 import jakarta.annotation.Resource;
@@ -41,5 +39,4 @@ public class SplitExecutor {
             }
         };
     }
-
 }
