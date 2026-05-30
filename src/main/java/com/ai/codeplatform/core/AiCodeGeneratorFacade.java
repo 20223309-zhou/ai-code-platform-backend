@@ -1,5 +1,6 @@
 package com.ai.codeplatform.core;
 
+import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.ai.codeplatform.ai.AiCodeGeneratorService;
@@ -91,14 +92,23 @@ public class AiCodeGeneratorFacade {
         AiCodeGeneratorService aiCodeGeneratorService = aiCodeGeneratorServiceFactory.getAiCodeGeneratorService(appId, codeGenTypeEnum);
         return switch (codeGenTypeEnum) {
             case HTML -> {
+                // 预创建目录，确保修改场景下工具能定位到项目目录
+                String htmlPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/html_" + appId;
+                FileUtil.mkdir(htmlPath);
                 TokenStream codeStream = aiCodeGeneratorService.generateHtmlCodeStream(appId, userMessage);
                 yield processTokenStream(codeStream, CodeGenTypeEnum.HTML, appId);
             }
             case MULTI_FILE -> {
+                // 先创建项目目录，确保工具调用时目录已存在
+                String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/multi_file_" + appId;
+                FileUtil.mkdir(projectPath);
                 TokenStream codeStream = aiCodeGeneratorService.generateMultiFileCodeStream(appId, userMessage);
                 yield processTokenStream(codeStream, CodeGenTypeEnum.MULTI_FILE, appId);
             }
             case VUE_PROJECT -> {
+                // 先创建项目目录，确保工具调用时目录已存在
+                String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/vue_project_" + appId;
+                FileUtil.mkdir(projectPath);
                 TokenStream codeStream = aiCodeGeneratorService.generateVueProjectCodeStream(appId, userMessage);
                 yield processTokenStream(codeStream, appId);
             }

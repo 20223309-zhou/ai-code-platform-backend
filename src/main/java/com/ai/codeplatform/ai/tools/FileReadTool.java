@@ -1,7 +1,6 @@
 package com.ai.codeplatform.ai.tools;
 
 import cn.hutool.json.JSONObject;
-import com.ai.codeplatform.constant.AppConstant;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.agent.tool.ToolMemoryId;
@@ -12,7 +11,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.stream.Stream;
 
 /**
  * 文件读取工具
@@ -22,28 +20,20 @@ import java.util.stream.Stream;
 @Component
 public class FileReadTool extends BaseTool {
 
-    @Tool("读取指定路径的文件内容")
+    @Tool("读取项目目录下的文件内容，路径如 \"src/App.vue\"，不要以 / 或 ./ 开头")
     public String readFile(
-            @P("文件的相对路径")
+            @P("文件的相对路径，如 \"src/App.vue\"，不要以 / 或 ./ 开头")
             String relativeFilePath,
             @ToolMemoryId Long appId
     ) {
         try {
+            relativeFilePath = BaseTool.normalizePath(relativeFilePath);
             Path path = Paths.get(relativeFilePath);
-            if (!path.isAbsolute()) {
-                // 扫描 tmp/code_output 下所有以 _{appId} 结尾的目录
-                Path outputDir = Paths.get(AppConstant.CODE_OUTPUT_ROOT_DIR);
-                try (Stream<Path> dirs = Files.list(outputDir)) {
-                    Path projectRoot = dirs
-                            .filter(Files::isDirectory)
-                            .filter(d -> d.getFileName().toString().endsWith("_" + appId))
-                            .findFirst()
-                            .orElse(outputDir.resolve("vue_project_" + appId));
-                    path = projectRoot.resolve(relativeFilePath);
-                } catch (IOException e) {
-                    path = outputDir.resolve("vue_project_" + appId).resolve(relativeFilePath);
-                }
+            Path projectRoot = BaseTool.resolveProjectRootDir(appId);
+            if (projectRoot == null) {
+                return "错误: 找不到应用 " + appId + " 的项目目录";
             }
+            path = projectRoot.resolve(relativeFilePath);
             if (!Files.exists(path) || !Files.isRegularFile(path)) {
                 return "错误：文件不存在或不是文件 - " + relativeFilePath;
             }

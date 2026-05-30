@@ -33,7 +33,7 @@ public class JsonMessageStreamHandler {
     private ToolManager toolManager;
 
     /**
-     * 处理 TokenStream（VUE_PROJECT）
+     * 处理 TokenStream
      * 解析 JSON 消息并重组为完整的响应格式
      *
      * @param originFlux         原始流
@@ -52,12 +52,12 @@ public class JsonMessageStreamHandler {
         StringBuilder aiResponseStringBuilder = new StringBuilder();
         // 每个 Flux 流可能包含多条工具调用和 AI_RESPONSE 响应信息，统一收集之后批量入库
         List<ChatHistoryOriginal> originalChatHistoryList = new ArrayList<>();
-        // 用于跟踪已经见过的工具ID，判断是否是第一次调用
-        Set<String> seenToolIds = new HashSet<>();
+        // 用于跟踪已经见过的工具名，同一工具多次调用只显示一次选择消息
+        Set<String> seenToolNames = new HashSet<>();
         return originFlux
                 .map(chunk -> {
                     // 解析每个 JSON 消息块
-                    return handleJsonMessageChunk(chunk, chatHistoryStringBuilder, aiResponseStringBuilder, originalChatHistoryList, seenToolIds);
+                    return handleJsonMessageChunk(chunk, chatHistoryStringBuilder, aiResponseStringBuilder, originalChatHistoryList, seenToolNames);
                 })
                 .filter(StrUtil::isNotEmpty) // 过滤空字串
                 .doOnComplete(() -> {
@@ -98,7 +98,7 @@ public class JsonMessageStreamHandler {
                                           StringBuilder chatHistoryStringBuilder,
                                           StringBuilder aiResponseStringBuilder,
                                           List<ChatHistoryOriginal> originalChatHistoryList,
-                                          Set<String> seenToolIds) {
+                                          Set<String> seenToolNames) {
         // 解析 JSON
         StreamMessage streamMessage = JSONUtil.toBean(chunk, StreamMessage.class);
         StreamMessageTypeEnum typeEnum = StreamMessageTypeEnum.getEnumByValue(streamMessage.getType());
@@ -114,12 +114,11 @@ public class JsonMessageStreamHandler {
             }
             case TOOL_REQUEST -> {
                 ToolRequestMessage toolRequestMessage = JSONUtil.toBean(chunk, ToolRequestMessage.class);
-                String toolId = toolRequestMessage.getId();
                 String toolName = toolRequestMessage.getName();
-                // 检查是否是第一次看到这个工具 ID
-                if (toolId != null && !seenToolIds.contains(toolId)) {
-                    // 第一次调用这个工具，记录 ID 并完整返回工具信息
-                    seenToolIds.add(toolId);
+                // 同一工具多次调用只显示一次选择消息
+                if (toolName != null && !seenToolNames.contains(toolName)) {
+                    // 第一次遇到这个工具，记录并显示选择消息
+                    seenToolNames.add(toolName);
                     // 获取工具实例
                     BaseTool tool = toolManager.getTool(toolName);
                     if (tool != null) {
@@ -154,8 +153,8 @@ public class JsonMessageStreamHandler {
                     chatHistoryStringBuilder.append(output);
                     return output;
                 }else if("activate_skill".equals(toolName)){
-                    return String.format("\n\n\uD83D\uDD0C[工具调用] %s%s\n\n", "使用Skill：",arguments.get("skill_name"));
-                }else if("read_skill_resource ".equals(toolName)){
+                    return String.format("\n\n\uD83D\uDCD6[工具调用] %s%s\n\n", "使用Skill：",arguments.get("skill_name"));
+                }else if("read_skill_resource".equals(toolName)){
                     if (StrUtil.isNotBlank(arguments.get("relative_path").toString())){
                         return String.format("\n\n\uD83D\uDCBC[工具调用] %s%s/%s\n\n", "阅读Skill.md中：",arguments.get("skill_name"),arguments.get("relative_path"));
                     }

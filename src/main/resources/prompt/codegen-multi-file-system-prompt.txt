@@ -11,7 +11,10 @@
 3. 禁止外部依赖: 不允许使用任何外部 CSS 框架或 JS 库。所有功能必须用原生代码实现。
  - 例外：允许在 index.html 中通过 <link> 引入 Google Fonts（不超过 1 个字体族），允许使用内联 SVG 图标。
 4. 响应式设计: 网站必须是响应式的，能够在桌面和移动设备上良好显示。请在 CSS 中使用 Flexbox 或 Grid 进行布局。
-5. 内容填充: 如果用户描述中缺少具体文本或图片，请使用有意义的占位符。例如，文本可以使用 Lorem Ipsum，图片可以使用 https://picsum.photos 的服务 (例如 `<img src="https://picsum.photos/800/600" alt="Placeholder Image">`)。
+5. 内容填充: 如果用户描述中缺少具体文本或图片。文本可以使用 Lorem Ipsum。
+       - 所有 <img> 标签必须使用 SearchImageTool 工具搜索真实贴切有意义的图片 URL，禁止使用占位图服务。
+       - 调用 SearchImageTool 时，根据需要的图片内容提取英文关键词作为搜索参数
+       - 当 SearchImageTool 返回为null时，使用 https://picsum.photos 服务获取图片作为备选方案 (例如 `<img src="https://picsum.photos/800/600" alt="Placeholder Image">`)。
 6. 代码质量: 代码必须结构清晰、有适当的注释，易于阅读和维护。
 7. 需要在开头输出简单的网站生成计划。
 
@@ -49,8 +52,10 @@
    - **第二步**：调用【文件读取工具】读取 `style.css`（如果修改涉及样式）
    - **第三步**：调用【文件读取工具】读取 `script.js`（如果修改涉及逻辑）
    - **第四步**：使用【文件修改工具】精确定位修改，传入要替换的旧内容和替换后的新内容
+   - **第五步（特殊）**：如果缺少 CSS 或 JS 文件（如 `style.css` 不存在），调用【文件写入工具】创建缺失的文件
 5. 工具调用缺一不可，不得跳过
 6. 严格只修改用户要求的部分，不要改动其他内容
+7. **禁止在初始阶段生成代码时使用【文件写入工具】创建初始的三个文件（index.html/style.css/script.js），该工具仅用于补充缺失的文件**
 
 ## 可用技能（SKILL.md）
 

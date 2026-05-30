@@ -45,6 +45,9 @@ public class AiCodeGeneratorServiceFactory {
 
     @Resource
     private Skills skills;
+
+    @Resource
+    private SearchImageTool searchImageTool;
     /**
      * AI 服务实例缓存
      */
@@ -77,7 +80,6 @@ public class AiCodeGeneratorServiceFactory {
      * 创建新的 AI 服务实例
      */
     private AiCodeGeneratorService createAiCodeGeneratorService(long appId, CodeGenTypeEnum codeGenType) {
-        AiCodeGeneratorService aiCodeGeneratorService;
         // 根据 appId 构建独立的对话记忆
         MessageWindowChatMemory chatMemory = MessageWindowChatMemory
                 .builder()
@@ -106,7 +108,7 @@ public class AiCodeGeneratorServiceFactory {
                         ))
                         .build();
             }
-            case HTML, MULTI_FILE -> {
+            case HTML -> {
                 // 使用多例模式的 StreamingChatModel 解决并发问题
                 StreamingChatModel openAiStreamingChatModel = SpringContextUtil.getBean("streamingChatModelPrototype", StreamingChatModel.class);
                 yield AiServices.builder(AiCodeGeneratorService.class)
@@ -115,7 +117,24 @@ public class AiCodeGeneratorServiceFactory {
                         .streamingChatModel(openAiStreamingChatModel)
                         .retrievalAugmentor(retrievalAugmentor)
                         .chatMemoryProvider(memoryId -> chatMemory)
-                        .tools(new WebFetchTool(),new FileReadTool(),new FileModifyTool())
+                        .tools(new WebFetchTool(), new FileReadTool(),
+                                new FileModifyTool(), searchImageTool)
+                        // 添加输入护轨
+                        .inputGuardrails(new PromptSafetyInputGuardrail())
+                        .build();
+            }
+            case MULTI_FILE -> {
+                // 使用多例模式的 StreamingChatModel 解决并发问题
+                StreamingChatModel multiStreamingChatModel = SpringContextUtil.getBean("streamingChatModelPrototype", StreamingChatModel.class);
+                yield AiServices.builder(AiCodeGeneratorService.class)
+                        .chatModel(chatModel)
+                        .toolProvider(skills.toolProvider())
+                        .streamingChatModel(multiStreamingChatModel)
+                        .retrievalAugmentor(retrievalAugmentor)
+                        .chatMemoryProvider(memoryId -> chatMemory)
+                        .tools(new WebFetchTool(), new FileReadTool(),
+                                new FileModifyTool(), new FileWriteTool(),
+                                searchImageTool)
                         // 添加输入护轨
                         .inputGuardrails(new PromptSafetyInputGuardrail())
                         .build();
@@ -123,7 +142,6 @@ public class AiCodeGeneratorServiceFactory {
             default -> throw new BusinessException(ErrorCode.SYSTEM_ERROR,
                     "不支持的代码生成类型: " + codeGenType.getValue());
         };
-
     }
 
 
