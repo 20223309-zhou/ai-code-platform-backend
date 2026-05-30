@@ -1,7 +1,6 @@
 package com.ai.codeplatform.ai.tools;
 
 import cn.hutool.json.JSONObject;
-import com.ai.codeplatform.constant.AppConstant;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.agent.tool.ToolMemoryId;
@@ -21,22 +20,20 @@ import java.nio.file.Paths;
 @Component
 public class FileDeleteTool extends BaseTool {
 
-    @Tool("删除指定路径的文件")
+    @Tool("删除项目目录下的文件")
     public String deleteFile(
-            @P("文件的相对路径")
+            @P("文件的相对路径，如 \"test.txt\"，不要以 / 或 ./ 开头")
             String relativeFilePath,
             @ToolMemoryId Long appId
     ) {
         try {
-            // 处理相对路径
-            Path path = Paths.get(relativeFilePath);
-            if (!path.isAbsolute()) {
-                String projectDirName = "vue_project_" + appId;
-                // 拿到vue工程文件的绝对路径
-                Path projectRoot = Paths.get(AppConstant.CODE_OUTPUT_ROOT_DIR, projectDirName);
-                // 拼接出能够拿到文件的绝对路径
-                path = projectRoot.resolve(relativeFilePath);
+            relativeFilePath = BaseTool.normalizePath(relativeFilePath);
+            // 获取项目根目录
+            Path projectRoot = BaseTool.resolveProjectRootDir(appId);
+            if (projectRoot == null) {
+                return "错误: 找不到应用 " + appId + " 的项目目录";
             }
+            Path path = projectRoot.resolve(relativeFilePath);
             if (!Files.exists(path)) {
                 return "警告：文件不存在，无需删除 - " + relativeFilePath;
             }

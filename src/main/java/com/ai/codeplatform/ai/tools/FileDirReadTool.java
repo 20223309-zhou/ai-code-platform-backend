@@ -3,7 +3,6 @@ package com.ai.codeplatform.ai.tools;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
-import com.ai.codeplatform.constant.AppConstant;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.agent.tool.ToolMemoryId;
@@ -39,19 +38,20 @@ public class FileDirReadTool extends BaseTool {
             ".log", ".tmp", ".cache", ".lock"
     );
 
-    @Tool("读取目录结构，获取指定目录下的所有文件和子目录信息")
+    @Tool("读取项目目录结构，获取指定目录下的所有文件和子目录信息")
     public String readDir(
-            @P("目录的相对路径，为空则读取整个项目结构")
+            @P("目录的相对路径（如 \"src\"），为空则读取整个项目结构，不要以 / 或 ./ 开头")
             String relativeDirPath,
             @ToolMemoryId Long appId
     ) {
         try {
-            Path path = Paths.get(relativeDirPath == null ? "" : relativeDirPath);
-            if (!path.isAbsolute()) {
-                String projectDirName = "vue_project_" + appId;
-                Path projectRoot = Paths.get(AppConstant.CODE_OUTPUT_ROOT_DIR, projectDirName);
-                path = projectRoot.resolve(relativeDirPath == null ? "" : relativeDirPath);
+            String dirPath = BaseTool.normalizePath(relativeDirPath == null ? "" : relativeDirPath);
+            // 获取项目绝对路径
+            Path projectRoot = BaseTool.resolveProjectRootDir(appId);
+            if (projectRoot == null) {
+                return "错误: 找不到应用 " + appId + " 的项目目录";
             }
+            Path path = dirPath.isEmpty() ? projectRoot : projectRoot.resolve(dirPath);
             File targetDir = path.toFile();
             if (!targetDir.exists() || !targetDir.isDirectory()) {
                 return "错误：目录不存在或不是目录 - " + relativeDirPath;

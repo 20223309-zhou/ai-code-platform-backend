@@ -2,7 +2,6 @@ package com.ai.codeplatform.ai.tools;
 
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.json.JSONObject;
-import com.ai.codeplatform.constant.AppConstant;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.agent.tool.ToolMemoryId;
@@ -23,22 +22,22 @@ import java.nio.file.StandardOpenOption;
 @Component
 public class FileWriteTool extends BaseTool {
 
-    @Tool("写入文件到指定路径")
+    @Tool("写入文件到项目目录下，路径如 \"package.json\"、\"src/App.vue\"，不要以 / 或 ./ 开头")
     public String writeFile(
-            @P("文件的相对路径")
+            @P("文件的相对路径，如 \"package.json\"，不要以 / 或 ./ 开头")
             String relativeFilePath,
             @P("要写入文件的内容")
             String content,
             @ToolMemoryId Long appId
     ) {
         try {
+            relativeFilePath = BaseTool.normalizePath(relativeFilePath);
             Path path = Paths.get(relativeFilePath);
-            if (!path.isAbsolute()) {
-                // 相对路径处理，创建基于 appId 的项目目录
-                String projectDirName = "vue_project_" + appId;
-                Path projectRoot = Paths.get(AppConstant.CODE_OUTPUT_ROOT_DIR, projectDirName);
-                path = projectRoot.resolve(relativeFilePath);
+            Path projectRoot = BaseTool.resolveProjectRootDir(appId);
+            if (projectRoot == null) {
+                return "错误: 找不到应用 " + appId + " 的项目目录";
             }
+            path = projectRoot.resolve(relativeFilePath);
             // 创建父目录（如果不存在）
             Path parentDir = path.getParent();
             if (parentDir != null) {

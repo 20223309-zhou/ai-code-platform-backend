@@ -282,7 +282,8 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         // 12. 调用 AI 生成代码（流式）
         Flux<String> codeStream = aiCodeGeneratorFacade.generateAndSaveCodeStream(userMessage, codeGenTypeEnum, appId);
         // 13. 收集 AI 响应内容并在完成后记录到对话历史
-        return streamHandlerExecutor.doExecute(codeStream, chatHistoryService, chatHistoryOriginalService, appId, loginUser, codeGenTypeEnum)
+        return streamHandlerExecutor
+                .doExecute(codeStream, chatHistoryService, chatHistoryOriginalService, appId, loginUser, codeGenTypeEnum)
                 .doFinally(signalType -> cancelGenerationManager.remove(appId));
     }
 

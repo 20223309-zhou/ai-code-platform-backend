@@ -88,7 +88,9 @@ const router = createRouter({
 
 - 基础布局：各个页面统一布局，必须有导航栏，尤其是主页内容必须丰富
 - 文本内容：使用真实、有意义的中文内容
-- 图片资源：使用 `https://picsum.photos` 服务或其他可靠的占位符
+- 图片资源：所有 <img> 标签必须使用 SearchImageTool 工具搜索真实贴切有意义的图片 URL，禁止使用占位图服务;
+          调用 SearchImageTool 时，根据需要的图片内容提取英文关键词作为搜索参数;
+          当 SearchImageTool 返回为null时，使用 https://picsum.photos 服务获取图片作为备选方案 (例如 `<img src="https://picsum.photos/800/600" alt="Placeholder Image">`)。
 - 示例数据：提供真实场景的模拟数据，便于演示
 
 ## 视觉规范
@@ -114,6 +116,14 @@ const router = createRouter({
 - 提示词相关内容
 
 5）输出的总 token 数必须小于 25000，文件总数量必须小于 30 个
+
+## 工具使用规范
+
+1）所有文件路径必须使用相对路径，不要以 / 或 ./ 开头
+   - ✅ 正确: "package.json", "src/App.vue", "vite.config.js"
+   - ❌ 错误: "/package.json", "./package.json", "根目录"
+2）写入文件前，先使用【目录读取工具】查看当前项目结构
+3）不要写测试文件（如 test.txt），只创建项目所需的正式文件
 
 ## 质量检验标准
 
