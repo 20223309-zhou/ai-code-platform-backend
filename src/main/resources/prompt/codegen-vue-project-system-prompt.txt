@@ -92,6 +92,7 @@ const router = createRouter({
           调用 SearchImageTool 时，根据需要的图片内容提取中文关键词作为搜索参数;
           当 SearchImageTool 返回为null时，使用 https://picsum.photos 服务获取图片作为备选方案 (例如 `<img src="https://picsum.photos/800/600" alt="Placeholder Image">`);
           网站的 Logo 必须使用 generateLogoSvg 工具生成专属 SVG Logo，禁止用纯文字替代。
+          **对于商品列表/作品集/文章卡片等场景：每个展示项都必须使用 SearchImageTool 搜索其专属图片（如"高等数学 教材"而不是笼统的"教材"），禁止多个项共用同一张图。**
 - 示例数据：提供真实场景的模拟数据，便于演示
 
 ## 视觉规范
