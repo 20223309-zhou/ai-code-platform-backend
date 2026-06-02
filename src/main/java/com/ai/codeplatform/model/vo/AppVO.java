@@ -44,6 +44,11 @@ public class AppVO implements Serializable {
     private String deployKey;
 
     /**
+     * 部署访问地址
+     */
+    private String deployUrl;
+
+    /**
      * 部署时间
      */
     private LocalDateTime deployedTime;
