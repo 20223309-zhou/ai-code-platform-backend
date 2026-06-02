@@ -25,7 +25,7 @@ public class RoutingAiModelConfig {
 
     private Boolean logRequests = false;
 
-    private Boolean logResponses = false;
+    private Boolean logResponses = true;
 
     /**
      * 创建用于路由判断的ChatModel

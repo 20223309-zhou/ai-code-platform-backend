@@ -300,6 +300,10 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         }
         AppVO appVO = new AppVO();
         BeanUtil.copyProperties(app, appVO);
+        // 填充部署访问地址
+        if (StrUtil.isNotBlank(app.getDeployKey())) {
+            appVO.setDeployUrl(String.format("%s/%s/", deployHost, app.getDeployKey()));
+        }
         // 关联查询用户信息
         Long userId = app.getUserId();
         if (userId != null) {
