@@ -1,9 +1,13 @@
 package com.ai.codeplatform.ai.tools;
 
+import cn.hutool.core.util.ObjUtil;
+import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.ai.codeplatform.config.PexelsConfig;
+import com.ai.codeplatform.exception.BusinessException;
+import com.ai.codeplatform.exception.ErrorCode;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.agent.tool.ToolMemoryId;
@@ -12,6 +16,11 @@ import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
+import org.bouncycastle.util.Arrays;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -25,93 +34,54 @@ import static com.ai.codeplatform.constant.PexelsConstant.*;
 @Component
 @Slf4j
 public class SearchImageTool extends BaseTool{
-
-    @Resource
-    private PexelsConfig pexelsConfig;
-
-    private final OkHttpClient httpClient = new OkHttpClient();
-
-    @Tool("搜索图片，优先使用英文关键词搜索（如\"cat\"而非\"猫\"），每次只使用单个核心关键词，不要组合多个词。返回多张图片URL的JSON数组供选择")
-    public String searchImage(@P("需要搜索的图片关键字") String keywords,@ToolMemoryId Long appId) {
-        try {
-            String url = buildSearchUrl(keywords);
-            
-            Request request = new Request.Builder()
-                    .url(url)
-                    .addHeader("Authorization", pexelsConfig.getApiKey())
-                    .build();
-
-            try (Response response = httpClient.newCall(request).execute()) {
-                if (!response.isSuccessful()) {
-                    log.error("Pexels API 调用失败: {}", response.code());
-                    return null;
-                }
-
-                String responseBody = response.body().string();
-                return extractImageUrl(responseBody, keywords);
-            }
-        } catch (IOException e) {
-            log.error("Pexels API 调用异常", e);
-            return null;
-        }
-    }
-
-    /**
-     * 构建搜索 URL
-     *
-     * @param keywords 搜索关键词
-     * @return 完整的搜索 URL
-     */
-    private String buildSearchUrl(String keywords) {
-        return String.format("%s?query=%s&per_page=%d&orientation=%s",
-                PEXELS_API_URL,
-                keywords,
-                PEXELS_PER_PAGE,
-                PEXELS_ORIENTATION_LANDSCAPE);
-    }
-
-    /**
-     * 从响应中提取图片 URL
-     *
-     * @param responseBody 响应体
-     * @param keywords     搜索关键词（用于日志）
-     * @return 图片 URL，未找到返回 null
-     */
-    private String extractImageUrl(String responseBody, String keywords) {
-        // 解析响应体
-        JSONObject jsonObject = JSONUtil.parseObj(responseBody);
-        JSONArray photos = jsonObject.getJSONArray("photos");
-
-        if (photos.isEmpty()) {
-            log.warn("Pexels 未检索到图片: {}", keywords);
-            return null;
-        }
-
-        // 收集所有图片 URL，返回 JSON 数组字符串方便 AI 理解
+    @Tool("搜索图片，优先使用中文关键词搜索（如\"猫\"而非\"cat\"），每次只使用单个核心关键词，不要组合多个词。返回多张图片URL的JSON数组供选择")
+    public String searchImage(@P("需要搜索的图片关键字") String keywords,@P("需要搜索的图片数量") Integer count,
+                              @ToolMemoryId Long appId) {
+        int imgCount = 0;
         JSONArray urlList = new JSONArray();
-        for (int i = 0; i < photos.size(); i++) {
-            JSONObject photo = photos.getJSONObject(i);
-            JSONObject src = photo.getJSONObject("src");
-            String url = src.getStr("large");
-            if (url == null || url.isEmpty()) {
-                url = src.getStr("medium");
+        // 要抓取的地址
+        String fetchUrl = String.format("https://cn.bing.com/images/async?q=%s&mmasync=1", keywords);
+        Document document;
+        try {
+            // 获取html文档
+            document = Jsoup.connect(fetchUrl).get();
+        } catch (IOException e) {
+            log.error("获取页面失败", e);
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "获取页面失败");
+        }
+        // 根据文档的标签类名获取元素
+        Element div = document.getElementsByClass("dgControl").first();
+        if (ObjUtil.isNull(div)) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "获取元素失败");
+        }
+        // 选择所有img标签并且类名为ming的元素
+        Elements imgElementList = div.select("img.mimg");
+        int uploadCount = 0;
+        log.info("图片计划数量：{}，图片关键词：{}", count, keywords);
+        for (Element imgElement : imgElementList) {
+            // 获取图片地址
+            String fileUrl = imgElement.attr("src");
+            if (StrUtil.isBlank(fileUrl)) {
+                log.info("当前链接为空，已跳过: {}", fileUrl);
+                continue;
             }
-            if (url == null || url.isEmpty()) {
-                url = src.getStr("original");
+            // 处理图片上传地址，防止出现转义问题
+            int questionMarkIndex = fileUrl.indexOf("?");
+            if (questionMarkIndex > -1) {
+                fileUrl = fileUrl.substring(0, questionMarkIndex);
             }
-            if (url != null && !url.isEmpty()) {
-                urlList.add(url);
+            log.info("图片关键字：{}，图片地址: {}",keywords ,fileUrl);
+            urlList.add(fileUrl);
+            imgCount++;
+            if(imgCount >= count){
+                break;
             }
         }
-
-        if (urlList.isEmpty()) {
-            log.warn("Pexels 图片 URL 为空: {}", keywords);
+        if(urlList.isEmpty()){
             return null;
         }
-
-        log.info("Pexels 检索到 {} 张图片, 关键词: {}", urlList.size(), keywords);
-        urlList.forEach(url -> log.info("  - {}", url));
-        return urlList.toString(); // 返回 JSON 数组: ["url1","url2",...]
+        log.info("图片关键字：{}，找到的图片总数量：{}",keywords ,urlList.size());
+        return urlList.toString();
     }
 
     @Override

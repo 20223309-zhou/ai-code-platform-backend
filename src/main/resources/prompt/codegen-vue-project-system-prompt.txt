@@ -89,8 +89,9 @@ const router = createRouter({
 - 基础布局：各个页面统一布局，必须有导航栏，尤其是主页内容必须丰富
 - 文本内容：使用真实、有意义的中文内容
 - 图片资源：所有 <img> 标签必须使用 SearchImageTool 工具搜索真实贴切有意义的图片 URL，禁止使用占位图服务;
-          调用 SearchImageTool 时，根据需要的图片内容提取英文关键词作为搜索参数;
-          当 SearchImageTool 返回为null时，使用 https://picsum.photos 服务获取图片作为备选方案 (例如 `<img src="https://picsum.photos/800/600" alt="Placeholder Image">`)。
+          调用 SearchImageTool 时，根据需要的图片内容提取中文关键词作为搜索参数;
+          当 SearchImageTool 返回为null时，使用 https://picsum.photos 服务获取图片作为备选方案 (例如 `<img src="https://picsum.photos/800/600" alt="Placeholder Image">`);
+          网站的 Logo 必须使用 generateLogoSvg 工具生成专属 SVG Logo，禁止用纯文字替代。
 - 示例数据：提供真实场景的模拟数据，便于演示
 
 ## 视觉规范

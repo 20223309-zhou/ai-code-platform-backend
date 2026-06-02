@@ -17,6 +17,7 @@ import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.rag.RetrievalAugmentor;
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.skills.Skills;
+import dev.langchain4j.store.memory.chat.InMemoryChatMemoryStore;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
@@ -48,6 +49,9 @@ public class AiCodeGeneratorServiceFactory {
 
     @Resource
     private SearchImageTool searchImageTool;
+
+    @Resource
+    private GenerateLogoTool generateLogoTool;
     /**
      * AI 服务实例缓存
      */
@@ -86,7 +90,7 @@ public class AiCodeGeneratorServiceFactory {
                 .id(appId)
                 .chatMemoryStore(redisChatMemoryStore)
                 // 对话记忆最大条数
-                .maxMessages(800000)
+                .maxMessages(80000)
                 .build();
         // 从数据库加载历史对话到记忆中
         chatHistoryOriginalService.loadOriginalChatHistoryToMemory(appId, chatMemory, 20);
@@ -118,7 +122,7 @@ public class AiCodeGeneratorServiceFactory {
                         .retrievalAugmentor(retrievalAugmentor)
                         .chatMemoryProvider(memoryId -> chatMemory)
                         .tools(new WebFetchTool(), new FileReadTool(),
-                                new FileModifyTool(), searchImageTool)
+                                new FileModifyTool(), searchImageTool, generateLogoTool)
                         // 添加输入护轨
                         .inputGuardrails(new PromptSafetyInputGuardrail())
                         .build();
@@ -134,7 +138,7 @@ public class AiCodeGeneratorServiceFactory {
                         .chatMemoryProvider(memoryId -> chatMemory)
                         .tools(new WebFetchTool(), new FileReadTool(),
                                 new FileModifyTool(), new FileWriteTool(),
-                                searchImageTool)
+                                searchImageTool, generateLogoTool)
                         // 添加输入护轨
                         .inputGuardrails(new PromptSafetyInputGuardrail())
                         .build();
