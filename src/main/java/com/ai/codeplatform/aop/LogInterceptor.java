@@ -134,15 +134,20 @@ public class LogInterceptor {
             recordLog(logInfo, startTime);
             saveLog(logInfo);
         } catch (Throwable e) {
-            if (e instanceof BusinessException){
-                throw new BusinessException(((BusinessException) e).getCode(), e.getMessage());
-            }
-            // 记录失败状态
+            // 先记录失败
             logInfo.setStatus("FAILED");
             logInfo.setEndTime(LocalDateTime.now());
             logInfo.setDurationMs((int) (System.currentTimeMillis() - startTime));
             log.error("接口调用异常", e);
             saveLog(logInfo);
+            // 再重新抛出原始异常（让 GlobalExceptionHandler 处理返回给前端）
+            if (e instanceof BusinessException) {
+                throw (BusinessException) e;   // 抛原始对象，不 new
+            }
+            if (e instanceof RuntimeException) {
+                throw (RuntimeException) e;
+            }
+            throw new RuntimeException(e);      // 非运行时异常兜底
         }
         return result;
     }

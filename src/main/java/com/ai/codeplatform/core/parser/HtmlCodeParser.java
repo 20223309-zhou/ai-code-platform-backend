@@ -20,10 +20,8 @@ public class HtmlCodeParser implements CodeParser<HtmlCodeResult> {
         String htmlCode = extractHtmlCode(codeContent);
         if (htmlCode != null && !htmlCode.trim().isEmpty()) {
             result.setHtmlCode(htmlCode.trim());
-        } else {
-            // 如果没有找到代码块，将整个内容作为HTML
-            result.setHtmlCode(codeContent.trim());
         }
+        // 如果没有找到 ```html 代码块，返回空结果，调用方跳过保存
         return result;
     }
 
