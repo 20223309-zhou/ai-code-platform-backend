@@ -1,11 +1,13 @@
 # iCodeAI — AI 驱动的应用生成平台
-![Java](https://img.shields.io/badge/Java-ED8B00?style=for-the-badge&logo=java&logoColor=white)
-![Spring Boot](https://img.shields.io/badge/Spring_Boot-6DB33F?style=for-the-badge&logo=springboot&logoColor=white)
-![LangChain4j](https://img.shields.io/badge/LangChain4j-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)
-![Qdrant](https://img.shields.io/badge/Qdrant-EE3664?style=for-the-badge&logo=qdrant&logoColor=white)
-![MySQL](https://img.shields.io/badge/MySQL-4479A1?style=for-the-badge&logo=mysql&logoColor=white)
-![Vue.js](https://img.shields.io/badge/Vue.js-4FC08D?style=for-the-badge&logo=vuedotjs&logoColor=white)
-![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
+![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.5.4-6DB33F?logo=springboot)
+![LangChain4j](https://img.shields.io/badge/LangChain4j-1.15-000000?logo=langchain)
+![MyBatis-Flex](https://img.shields.io/badge/MyBatis_Flex-1.11-FF6A00?logo=mybatis)
+![Qdrant](https://img.shields.io/badge/Qdrant-1.17-EE3664?logo=qdrant)
+![MySQL](https://img.shields.io/badge/MySQL-8-4479A1?logo=mysql)
+![Redis](https://img.shields.io/badge/Redis-7.2-DC382D?logo=redis)
+![Vue.js](https://img.shields.io/badge/Vue.js-3.5-4FC08D?logo=vuedotjs)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript)
 
 
 iCodeAI  是一个基于 **Langchain4j + RAG + Qdrant + Spring Boot + Vue 3 + 大模型能力** 构建的智能应用生成平台。
