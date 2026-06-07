@@ -220,7 +220,12 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
                 }
                 String ct = f.getContentType();
                 if (ct != null && ct.startsWith("image/")) hasImage = true;
-                else if (ct != null && ct.contains("text")) hasText = true;
+                else if (isTextFile(f)){
+                    hasText = true;
+                }
+                else{
+                    throw new BusinessException(ErrorCode.OPERATION_ERROR, "请上传正确的附件！");
+                }
             }
             if (hasImage && hasText) intentMessage += " (用户上传了参考图片和需求文档)";
             else if (hasImage) intentMessage += " (用户上传了参考图片)";
@@ -254,16 +259,24 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
                     contentMap.put("type", "image");
                     contentMap.put("mimeType", "image/" + imageSuffix);
                     contentMap.put("url", imageUrl);
-                } else if (contentType != null && contentType.contains("text")) {
+                } else if (isTextFile(file)) {
                     // 文本文件 → 读取内容 → TextContent
                     String text = null;
                     try {
                         text = new String(file.getBytes(), StandardCharsets.UTF_8);
-                    } catch (IOException e) {
-                        throw new BusinessException(ErrorCode.SYSTEM_ERROR, "文本文件转换异常");
+                    } catch (Exception e) {
+                        try {
+                            text = new String(file.getBytes(), "GBK");
+                        } catch (IOException ex) {
+                            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "文本文件转换异常");
+                        }
                     }
                     contents.add(new TextContent("=== 上传的文件内容 ===\n" + text));
-                    contentMap.put("type", "text");
+                    if(file.getOriginalFilename() != null){
+                        contentMap.put("type", file.getOriginalFilename().toLowerCase().substring(file.getOriginalFilename().lastIndexOf(".")+1));
+                    }else{
+                        contentMap.put("type", "text");
+                    }
                     contentMap.put("text", "=== 上传的文件内容 ===\n" + text);
                 }
                 serializableContents.add(contentMap);
@@ -285,6 +298,25 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         return streamHandlerExecutor
                 .doExecute(codeStream, chatHistoryService, chatHistoryOriginalService, appId, loginUser, codeGenTypeEnum)
                 .doFinally(signalType -> cancelGenerationManager.remove(appId));
+    }
+
+    /**
+     * 判断文件是否为文本类型文件
+     */
+    private boolean isTextFile(MultipartFile file) {
+        String contentType = file.getContentType();
+        if (contentType == null) {
+            return false;
+        }
+        // 通过文件扩展名判断
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename != null) {
+            String lowerName = originalFilename.toLowerCase();
+            return lowerName.endsWith(".md") ||
+                    lowerName.endsWith(".markdown") ||
+                    lowerName.endsWith(".txt");
+        }
+        return false;
     }
 
     /**

@@ -38,7 +38,7 @@ public class RateLimitAspect {
     @Before("@annotation(rateLimit)")
     public void doBefore(JoinPoint point, RateLimit rateLimit) {
         String key = generateRateLimitKey(point, rateLimit);
-        // 使用Redisson的分布式限流器
+        // 使用Redisson的分布式限流器，并为限流器设置key
         RRateLimiter rateLimiter = redissonClient.getRateLimiter(key);
         rateLimiter.expire(Duration.ofHours(1)); // 1 小时后过期
         // 设置限流器参数：每个时间窗口允许的请求数和时间窗口
@@ -50,6 +50,7 @@ public class RateLimitAspect {
     }
 
     private String generateRateLimitKey(JoinPoint point, RateLimit rateLimit) {
+        // rateLimiter key
         StringBuilder keyBuilder = new StringBuilder();
         keyBuilder.append("rate_limit:");
         // 添加自定义前缀

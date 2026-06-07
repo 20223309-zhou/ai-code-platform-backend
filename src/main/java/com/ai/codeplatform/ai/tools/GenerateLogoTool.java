@@ -1,235 +1,198 @@
 package com.ai.codeplatform.ai.tools;
 
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
+import cn.hutool.json.JSONUtil;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 /**
  * SVG Logo 生成工具
- * 根据品牌名称和配色生成矢量 Logo
+ * 从 Iconify 搜索图标嵌入 Logo 布局，比 AI 手写 SVG 质量稳定得多
  */
 @Slf4j
 @Component
 public class GenerateLogoTool extends BaseTool {
 
-    @Tool("为网站生成SVG Logo图标，返回可直接嵌入HTML的SVG代码。每次生成一个Logo即可，不要把多个选项拼接在一起")
+    private static final String ICONIFY_API = "https://api.iconify.design/search?limit=5";
+    private static final String ICONIFY_SVG = "https://api.iconify.design";
+
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(5))
+            .build();
+
+    @Tool("为网站生成SVG Logo图标，返回可直接嵌入HTML的SVG代码。从Iconify图标库搜索真实图标拼入Logo")
     public String generateLogoSvg(
             @P("品牌名称或Logo上显示的文字")
             String brandName,
             @P("品牌主色，十六进制格式如 #4F7CFF")
             String primaryColor,
-            @P("Logo风格：minimal(简约文字)、geometric(几何图形)、rounded(圆润亲和)、modern(现代感)、classic(经典徽章)、tech(科技感)")
-            String style
+            @P("Logo图标的关键词（必须使用英文），基于网站内容或品牌自动提取(一次调用只允许使用单个单词)，如 doraemon")
+            String description
     ) {
-        if (StrUtil.isBlank(brandName)) {
-            return "错误: 品牌名称不能为空";
-        }
-        if (StrUtil.isBlank(primaryColor)) {
-            primaryColor = "#4F7CFF";
-        }
-        if (StrUtil.isBlank(style)) {
-            style = "minimal";
+        if (StrUtil.isBlank(brandName)) return "错误: 品牌名称不能为空";
+        if (StrUtil.isBlank(primaryColor)) primaryColor = "#4F7CFF";
+        log.info("生成 Logo: {}, {}, {}", brandName, primaryColor, description);
+        // 1. 从 Iconify 搜索图标 SVG
+        String iconSvg = fetchIconSvg(description);
+        if (iconSvg == null) {
+            // fallback: 首字母图标
+            return generateFallbackSvg(brandName, primaryColor);
         }
 
-        // 自动生成辅助色（加深30%用于渐变）
-        String darker = darkenColor(primaryColor);
+        // 2. 把图标颜色的 fill/ stroke 替换为品牌主色
+        iconSvg = recolorSvg(iconSvg, primaryColor);
 
-        String svg = switch (style) {
-            case "geometric" -> generateGeometricSvg(brandName, primaryColor, darker);
-            case "rounded" -> generateRoundedSvg(brandName, primaryColor, darker);
-            case "modern" -> generateModernSvg(brandName, primaryColor, darker);
-            case "classic" -> generateClassicSvg(brandName, primaryColor, darker);
-            case "tech" -> generateTechSvg(brandName, primaryColor, darker);
-            default -> generateMinimalSvg(brandName, primaryColor, darker);
-        };
+        // 3. 从 Iconify SVG 中提取 viewBox
+        String iconViewBox = extractViewBox(iconSvg, "0 0 24 24");
 
-        log.info("生成 Logo: brandName={}, style={}, color={}", brandName, style, primaryColor);
+        // 4. 提取图标内部标签
+        String iconContent = extractSvgContent(iconSvg);
+
+        // 5. 组装完整 Logo
+        return String.format("""
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" width="200" height="60">
+                  <g transform="translate(8, 6) scale(2)">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="%s" width="24" height="24" fill="%s">
+                      %s
+                    </svg>
+                  </g>
+                  <text x="66" y="40" font-family="Arial,sans-serif" font-size="24" font-weight="bold" fill="%s" dominant-baseline="middle">%s</text>
+                </svg>
+                """, iconViewBox, primaryColor, iconContent, primaryColor, escapeXml(brandName));
+    }
+
+    /**
+     * 从 Iconify 搜索并获取 SVG 代码
+     */
+    private String fetchIconSvg(String keyword) {
+        if (StrUtil.isBlank(keyword)) return null;
+        try {
+            // 搜索
+            String searchUrl = ICONIFY_API + "&query=" + URLEncoder.encode(keyword, StandardCharsets.UTF_8);
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(searchUrl))
+                    .timeout(Duration.ofSeconds(5))
+                    .GET()
+                    .build();
+            HttpResponse<String> res = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+            if (res.statusCode() != 200) {
+                log.warn("Iconify 搜索失败, status: {}", res.statusCode());
+                return null;
+            }
+
+            String body = res.body();
+            log.debug("Iconify 响应: {}", StrUtil.sub(body, 0, 200));
+            JSONObject json = JSONUtil.parseObj(body);
+            JSONArray icons = json.getJSONArray("icons");
+            if (icons == null || icons.isEmpty()) return null;
+
+            // 取第一个结果（返回格式为字符串 "prefix:name"）
+            String firstIcon;
+            try {
+                firstIcon = icons.getStr(0);
+            } catch (Exception e) {
+                log.warn("Iconify 解析图标结果失败: {}", e.getMessage());
+                return null;
+            }
+            if (StrUtil.isBlank(firstIcon) || !firstIcon.contains(":")) {
+                log.warn("Iconify 图标格式异常: {}", firstIcon);
+                return null;
+            }
+            String[] parts = firstIcon.split(":", 2);
+            String prefix = parts[0];
+            String name = parts[1];
+
+            // 获取 SVG
+            String svgUrl = ICONIFY_SVG + "/" + prefix + "/" + name + ".svg";
+            HttpRequest svgReq = HttpRequest.newBuilder()
+                    .uri(URI.create(svgUrl))
+                    .timeout(Duration.ofSeconds(5))
+                    .GET()
+                    .build();
+            HttpResponse<String> svgRes = httpClient.send(svgReq, HttpResponse.BodyHandlers.ofString());
+            if (svgRes.statusCode() != 200) return null;
+
+            log.info("Iconify 图标: {} -> {}:{}", keyword, prefix, name);
+            return svgRes.body();
+        } catch (IOException | InterruptedException e) {
+            log.warn("Iconify 请求失败: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 替换 SVG 中的颜色为品牌主色
+     */
+    private String recolorSvg(String svg, String color) {
+        // 替换 fill 属性 （fill="xxx" 或 fill='xxx'）
+        svg = svg.replaceAll("fill\\s*=\\s*\"[^\"]*\"", "fill=\"" + color + "\"");
+        svg = svg.replaceAll("fill\\s*=\\s*'[^']*'", "fill='" + color + "'");
+        svg = svg.replaceAll("fill\\s*=\\s*currentColor", "fill=\"" + color + "\"");
+        // 替换 stroke 属性
+        svg = svg.replaceAll("stroke\\s*=\\s*\"[^\"]*\"", "stroke=\"" + color + "\"");
+        svg = svg.replaceAll("stroke\\s*=\\s*'[^']*'", "stroke='" + color + "'");
+        svg = svg.replaceAll("stroke\\s*=\\s*currentColor", "stroke=\"" + color + "\"");
         return svg;
     }
 
-    // ==================== 6 种丰富风格 ====================
-
     /**
-     * 简约文字 Logo：渐变图标 + 品牌名
+     * 提取 SVG 的 viewBox
      */
-    private String generateMinimalSvg(String brandName, String primary, String darker) {
-        String firstChar = escapeXml(brandName.substring(0, 1));
-        return String.format("""
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" width="200" height="60">
-                  <defs>
-                    <linearGradient id="g" x1="0%%" y1="0%%" x2="100%%" y2="100%%">
-                      <stop offset="0%%" stop-color="%s"/>
-                      <stop offset="100%%" stop-color="%s"/>
-                    </linearGradient>
-                  </defs>
-                  <rect x="4" y="6" width="46" height="48" rx="12" fill="url(#g)"/>
-                  <rect x="10" y="12" width="34" height="36" rx="8" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/>
-                  <text x="27" y="33" font-family="Arial,sans-serif" font-size="18" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">%s</text>
-                  <text x="60" y="38" font-family="Arial,sans-serif" font-size="24" font-weight="bold" fill="%s" dominant-baseline="middle">%s</text>
-                </svg>
-                """, primary, darker, firstChar, primary, escapeXml(brandName));
+    private String extractViewBox(String svg, String fallback) {
+        Matcher m = Pattern.compile("viewBox\\s*=\\s*\"([^\"]+)\"").matcher(svg);
+        return m.find() ? m.group(1) : fallback;
     }
 
     /**
-     * 几何图形 Logo：六边形 + 装饰点
+     * 提取 <svg> 标签内部的内容（去掉 <svg ...> 和 </svg>）
      */
-    private String generateGeometricSvg(String brandName, String primary, String darker) {
-        String firstChar = escapeXml(brandName.substring(0, 1));
+    private String extractSvgContent(String svg) {
+        int start = svg.indexOf('>');
+        int end = svg.lastIndexOf("</svg>");
+        if (start == -1 || end == -1 || start >= end) return svg;
+        return svg.substring(start + 1, end).trim();
+    }
+
+    /**
+     * Fallback：首字母 + 圆底 Logo
+     */
+    private String generateFallbackSvg(String brandName, String primary) {
+        String first = escapeXml(brandName.substring(0, 1));
         return String.format("""
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" width="200" height="60">
-                  <defs>
-                    <linearGradient id="g" x1="0%%" y1="0%%" x2="100%%" y2="100%%">
-                      <stop offset="0%%" stop-color="%s"/>
-                      <stop offset="100%%" stop-color="%s"/>
-                    </linearGradient>
-                    <filter id="shadow">
-                      <feDropShadow dx="1" dy="2" stdDeviation="2" flood-opacity="0.3"/>
-                    </filter>
-                  </defs>
-                  <polygon points="27,6 45,16 45,36 27,46 9,36 9,16" fill="url(#g)" filter="url(#shadow)"/>
-                  <polygon points="27,10 41,18 41,34 27,42 13,34 13,18" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="1"/>
-                  <text x="27" y="31" font-family="Arial,sans-serif" font-size="16" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">%s</text>
+                  <rect x="4" y="6" width="44" height="48" rx="10" fill="%s"/>
+                  <text x="26" y="34" font-family="Arial,sans-serif" font-size="22" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">%s</text>
                   <text x="58" y="38" font-family="Arial,sans-serif" font-size="24" font-weight="bold" fill="%s" dominant-baseline="middle">%s</text>
                 </svg>
-                """, primary, darker, firstChar, primary, escapeXml(brandName));
-    }
-
-    /**
-     * 圆润亲和 Logo：重叠圆 + 首字母
-     */
-    private String generateRoundedSvg(String brandName, String primary, String darker) {
-        String firstChar = escapeXml(brandName.substring(0, 1));
-        return String.format("""
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" width="200" height="60">
-                  <defs>
-                    <linearGradient id="g" x1="0%%" y1="0%%" x2="100%%" y2="100%%">
-                      <stop offset="0%%" stop-color="%s"/>
-                      <stop offset="100%%" stop-color="%s"/>
-                    </linearGradient>
-                  </defs>
-                  <circle cx="18" cy="30" r="14" fill="url(#g)" opacity="0.4"/>
-                  <circle cx="34" cy="30" r="14" fill="url(#g)" opacity="0.6"/>
-                  <circle cx="26" cy="30" r="18" fill="url(#g)"/>
-                  <text x="26" y="34" font-family="Arial,sans-serif" font-size="18" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">%s</text>
-                  <text x="56" y="38" font-family="Arial,sans-serif" font-size="24" font-weight="bold" fill="%s" dominant-baseline="middle">%s</text>
-                </svg>
-                """, darker, primary, primary, firstChar, primary, escapeXml(brandName));
-    }
-
-    /**
-     * 现代感 Logo：双渐变层叠
-     */
-    private String generateModernSvg(String brandName, String primary, String darker) {
-        String firstChar = escapeXml(brandName.substring(0, 1));
-        return String.format("""
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" width="200" height="60">
-                  <defs>
-                    <linearGradient id="g1" x1="0%%" y1="0%%" x2="100%%" y2="100%%">
-                      <stop offset="0%%" stop-color="%s"/>
-                      <stop offset="100%%" stop-color="%s"/>
-                    </linearGradient>
-                    <linearGradient id="g2" x1="100%%" y1="0%%" x2="0%%" y2="100%%">
-                      <stop offset="0%%" stop-color="%s"/>
-                      <stop offset="100%%" stop-color="%s"/>
-                    </linearGradient>
-                  </defs>
-                  <rect x="4" y="4" width="48" height="52" rx="6" fill="url(#g1)"/>
-                  <rect x="4" y="4" width="36" height="44" rx="4" fill="url(#g2)" opacity="0.85"/>
-                  <text x="22" y="30" font-family="Arial,sans-serif" font-size="18" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">%s</text>
-                  <text x="62" y="38" font-family="Arial,sans-serif" font-size="24" font-weight="bold" fill="%s" dominant-baseline="middle">%s</text>
-                </svg>
-                """, darker, primary, primary, darker, firstChar, primary, escapeXml(brandName));
-    }
-
-    /**
-     * 经典徽章 Logo：盾牌 + 绶带
-     */
-    private String generateClassicSvg(String brandName, String primary, String darker) {
-        String firstChar = escapeXml(brandName.substring(0, 1));
-        return String.format("""
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" width="200" height="60">
-                  <defs>
-                    <linearGradient id="g" x1="0%%" y1="0%%" x2="0%%" y2="100%%">
-                      <stop offset="0%%" stop-color="%s"/>
-                      <stop offset="100%%" stop-color="%s"/>
-                    </linearGradient>
-                  </defs>
-                  <path d="M24,4 L40,4 L48,14 L48,30 C48,38 40,46 32,50 C24,46 16,38 16,30 L16,14 Z" fill="url(#g)"/>
-                  <path d="M24,4 L40,4 L48,14 L48,30 C48,38 40,46 32,50 C24,46 16,38 16,30 L16,14 Z" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
-                  <text x="32" y="34" font-family="Arial,sans-serif" font-size="20" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">%s</text>
-                  <text x="58" y="38" font-family="Arial,sans-serif" font-size="24" font-weight="bold" fill="%s" dominant-baseline="middle">%s</text>
-                </svg>
-                """, primary, darker, firstChar, primary, escapeXml(brandName));
-    }
-
-    /**
-     * 科技感 Logo：菱形 + 线条装饰
-     */
-    private String generateTechSvg(String brandName, String primary, String darker) {
-        String firstChar = escapeXml(brandName.substring(0, 1));
-        return String.format("""
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" width="200" height="60">
-                  <defs>
-                    <linearGradient id="g" x1="0%%" y1="0%%" x2="100%%" y2="100%%">
-                      <stop offset="0%%" stop-color="%s"/>
-                      <stop offset="100%%" stop-color="%s"/>
-                    </linearGradient>
-                  </defs>
-                  <rect x="4" y="8" width="44" height="44" rx="2" fill="url(#g)" transform="rotate(45, 26, 30)"/>
-                  <rect x="12" y="16" width="28" height="28" rx="1" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1.5" transform="rotate(45, 26, 30)"/>
-                  <circle cx="28" cy="24" r="2" fill="white" opacity="0.6"/>
-                  <circle cx="36" cy="30" r="1.5" fill="white" opacity="0.4"/>
-                  <circle cx="22" cy="38" r="1" fill="white" opacity="0.3"/>
-                  <text x="26" y="33" font-family="Arial,sans-serif" font-size="16" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">%s</text>
-                  <text x="58" y="38" font-family="Arial,sans-serif" font-size="24" font-weight="bold" fill="%s" dominant-baseline="middle">%s</text>
-                </svg>
-                """, primary, darker, firstChar, primary, escapeXml(brandName));
-    }
-
-    // ==================== 工具方法 ====================
-
-    /**
-     * 简单加深颜色，用于渐变辅助色
-     */
-    private String darkenColor(String hex) {
-        if (hex == null || !hex.startsWith("#") || hex.length() < 7) {
-            return "#333333";
-        }
-        try {
-            int r = Integer.parseInt(hex.substring(1, 3), 16);
-            int g = Integer.parseInt(hex.substring(3, 5), 16);
-            int b = Integer.parseInt(hex.substring(5, 7), 16);
-            r = Math.max(0, (int)(r * 0.6));
-            g = Math.max(0, (int)(g * 0.6));
-            b = Math.max(0, (int)(b * 0.6));
-            return String.format("#%02X%02X%02X", r, g, b);
-        } catch (Exception e) {
-            return "#333333";
-        }
+                """, primary, first, primary, escapeXml(brandName));
     }
 
     private String escapeXml(String input) {
         if (input == null) return "";
-        return input
-                .replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;")
-                .replace("\"", "&quot;")
-                .replace("'", "&apos;");
+        return input.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                .replace("\"", "&quot;").replace("'", "&apos;");
     }
 
     @Override
-    public String getToolName() {
-        return "generateLogoSvg";
-    }
+    public String getToolName() { return "generateLogoSvg"; }
 
     @Override
-    public String getDisplayName() {
-        return "生成Logo";
-    }
+    public String getDisplayName() { return "生成Logo"; }
 
     @Override
     public String generateToolExecutedResult(JSONObject arguments) {
