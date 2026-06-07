@@ -11,7 +11,7 @@ public class SearchImageToolTest {
     private SearchImageTool searchImageTool;
     @Test
     void searchImage() {
-        String url = searchImageTool.searchImage("初音未来", 1L);
+        String url = searchImageTool.searchImage("初音未来",2, 1L);
         System.out.println("搜索结果：" + url);
     }
 }
