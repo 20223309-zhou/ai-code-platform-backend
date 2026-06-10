@@ -43,6 +43,7 @@ public class QdrantConfig {
     @PostConstruct
     public void initCollection() {
         try {
+            // 创建 Qdrant 客户端
             QdrantGrpcClient grpcClient = QdrantGrpcClient.newBuilder(host, port, false)
                     .build();
             QdrantClient client = new QdrantClient(grpcClient);

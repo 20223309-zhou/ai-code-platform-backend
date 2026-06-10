@@ -24,6 +24,10 @@ public class RetrieverConfig {
                     // 根据用户查询动态生成过滤条件
                     if (query.text().contains("vue")) {
                         return metadataKey("project_type").isEqualTo("vue");
+                    }else if (query.text().contains("html")){
+                        return metadataKey("project_type").isEqualTo("html");
+                    }else if (query.text().contains("multi")){
+                        return metadataKey("project_type").isEqualTo("multi");
                     }
                     return null;  // 不过滤
                 })

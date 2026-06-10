@@ -138,11 +138,25 @@ public class LogInterceptor {
             logInfo.setStatus("FAILED");
             logInfo.setEndTime(LocalDateTime.now());
             logInfo.setDurationMs((int) (System.currentTimeMillis() - startTime));
-            log.error("接口调用异常", e);
-            saveLog(logInfo);
-            // 再重新抛出原始异常（让 GlobalExceptionHandler 处理返回给前端）
+
+            // 根据异常类型分类记录
             if (e instanceof BusinessException) {
-                throw (BusinessException) e;   // 抛原始对象，不 new
+                BusinessException be = (BusinessException) e;
+                logInfo.setOperation("业务异常: " + (be.getMessage() != null ? be.getMessage() : "未知业务错误"));
+                log.warn("业务异常 - 错误码: {}, 消息: {}", be.getCode(), be.getMessage());
+            } else if (e instanceof RuntimeException) {
+                logInfo.setOperation("运行时异常: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+                log.error("运行时异常 - 用户ID: {}, URI: {}", logInfo.getUserId(), logInfo.getRequestUri(), e);
+            } else {
+                logInfo.setOperation("系统异常: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+                log.error("系统异常 - 用户ID: {}, URI: {}", logInfo.getUserId(), logInfo.getRequestUri(), e);
+            }
+            // 统一保存日志
+            saveLog(logInfo);
+
+            // 重新抛出原始异常（让 GlobalExceptionHandler 处理返回给前端）
+            if (e instanceof BusinessException){
+                throw (BusinessException) e;
             }
             if (e instanceof RuntimeException) {
                 throw (RuntimeException) e;
