@@ -153,12 +153,18 @@ public class JsonMessageStreamHandler {
                     chatHistoryStringBuilder.append(output);
                     return output;
                 }else if("activate_skill".equals(toolName)){
-                    return String.format("\n\n\uD83D\uDCD6[工具调用] %s%s\n\n", "使用Skill：",arguments.get("skill_name"));
+                    String output = String.format("\n\n\uD83D\uDCD6[工具调用] %s%s\n\n", "使用Skill：",arguments.get("skill_name"));
+                    chatHistoryStringBuilder.append(output);
+                    return output;
                 }else if("read_skill_resource".equals(toolName)){
                     if (StrUtil.isNotBlank(arguments.get("relative_path").toString())){
-                        return String.format("\n\n\uD83D\uDCBC[工具调用] %s%s/%s\n\n", "阅读Skill.md中：",arguments.get("skill_name"),arguments.get("relative_path"));
+                        String output = String.format("\n\n\uD83D\uDCBC[工具调用] %s%s/%s\n\n", "阅读Skill.md中：",arguments.get("skill_name"),arguments.get("relative_path"));
+                        chatHistoryStringBuilder.append(output);
+                        return output;
                     }
-                    return String.format("\n\n\uD83D\uDCBC[工具调用] %s%s\n\n", "调用Skill：",arguments.get("skill_name"));
+                    String output = String.format("\n\n\uD83D\uDCBC[工具调用] %s%s\n\n", "调用Skill：",arguments.get("skill_name"));
+                    chatHistoryStringBuilder.append(output);
+                    return output;
                 }else {
                     log.warn("未找到对应的工具: {}, 使用默认格式化", toolName);
                     String output = String.format("\n\n⚠️[工具执行结果] %s\n参数: %s\n", toolName, arguments);

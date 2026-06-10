@@ -1,6 +1,7 @@
 package com.ai.codeplatform.rag;
 
 import cn.hutool.core.io.FileUtil;
+import cn.hutool.core.util.StrUtil;
 import com.ai.codeplatform.exception.BusinessException;
 import com.ai.codeplatform.exception.ErrorCode;
 import com.ai.codeplatform.rag.splitter.SplitExecutor;
@@ -40,13 +41,14 @@ public class QdrantDocumentLoader {
     public void loadDocuments(String dirPath) {
         log.info("开始智能加载文档到 Qdrant...");
         try {
-            // 从Qdrant中获取已存在的文件路径
+            // 从Qdrant中获取已存在的文件名
             Set<String> existingPaths = getExistingFilePaths();
             log.info("Qdrant 中已有 {} 个文件", existingPaths.size());
             
             int addedCount = 0;
             int skippedCount = 0;
-            
+
+            // 需要写入语料库的文件相对路径
             List<Path> files = Files.walk(Paths.get(dirPath))
                     .filter(p -> {
                         String path = p.toString();
@@ -54,13 +56,16 @@ public class QdrantDocumentLoader {
                                 && !path.contains("dist")
                                 && !path.contains(".git");
                     })
-                    .filter(Files::isRegularFile)
+                    // 只保留普通文件，排除目录
+                    .filter(path1 -> Files.isRegularFile(path1))
+                    // 只保留扩展名为"vue", "html", "js", "css"的文件
                     .filter(p -> isSupportedFile(p.toString()))
                     .toList();
             
             log.info("扫描到 {} 个待处理文件", files.size());
             // 遍历指定目录所有筛选过的文件
             for (var file : files) {
+                // 文件的绝对路径
                 String filePath = file.toString();
                 String content = FileUtil.readUtf8String(file.toFile());
                 log.info("处理文件: {}, 内容长度: {}", FileUtil.getName(filePath), content.length());
@@ -70,7 +75,7 @@ public class QdrantDocumentLoader {
                 }
                 if (!existingPaths.contains(filePath)) {
                     List<TextSegment> segments = splitExecutor.chunk(filePath, content).stream()
-                            .filter(s -> s != null && cn.hutool.core.util.StrUtil.isNotBlank(s.text()))
+                            .filter(s -> s != null && StrUtil.isNotBlank(s.text()))
                             .toList();
 
                     List<Embedding> embeddings = embeddingModel.embedAll(segments).content();
@@ -105,10 +110,16 @@ public class QdrantDocumentLoader {
                     .build();
 
             EmbeddingSearchResult<TextSegment> result = embeddingStore.search(request);
-
+            //result.matches() 返回的是 List<EmbeddingMatch<TextSegment>>，其中每个 EmbeddingMatch 包含：
+            //1.embedded() - 嵌入的文本片段（TextSegment），包含：
+            //  文本内容
+            //  元数据（metadata），如文件名、来源等
+            //2.score() - 相似度分数（0-1之间）
+            //3.embeddingId() - 向量ID
+            //4.embedding() - 向量本身
             return result.matches().stream()
-                    .map(textSegmentEmbeddingMatch -> {
-                        TextSegment embedded = textSegmentEmbeddingMatch.embedded();
+                    .map(EmbeddingMatch -> {
+                        TextSegment embedded = EmbeddingMatch.embedded();
                         return embedded;
                     })
                     .map(textSegment -> {
