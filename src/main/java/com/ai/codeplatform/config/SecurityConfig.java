@@ -25,6 +25,10 @@ public class SecurityConfig {
                 )
                 .oauth2Login(oauth2 -> oauth2
                         .successHandler(oAuth2LoginSuccessHandler)
+                        .failureHandler((request, response, exception) -> {
+                            // 用户取消授权或认证失败时，重定向到前端登录页
+                            response.sendRedirect(oAuth2LoginSuccessHandler.getAuthUrl());
+                        })
                 );
 
         return http.build();
