@@ -1,5 +1,6 @@
 HELP.md
 target/
+sharding-pro.yml
 application-dev.yml
 tmp
 .mvn/wrapper/maven-wrapper.jar

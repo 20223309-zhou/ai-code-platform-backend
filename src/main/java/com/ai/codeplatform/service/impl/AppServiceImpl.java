@@ -378,7 +378,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
                 .eq("priority", priority)
                 .eq("userId", userId)
                 .eq("category", StrUtil.isNotBlank(searchCategory) ? searchCategory : null)
-                .orderBy(sortField, "ascend".equals(sortOrder));
+                .orderBy(sortField, "asc".equals(sortOrder));
     }
 
     /**

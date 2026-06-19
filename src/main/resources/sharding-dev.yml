@@ -1,0 +1,37 @@
+# 1. 定义真实的主从数据源
+dataSources:
+  master:
+    dataSourceClassName: com.zaxxer.hikari.HikariDataSource
+    driverClassName: com.mysql.cj.jdbc.Driver
+    jdbcUrl: jdbc:mysql://192.168.100.100:3308/ai_code_platform?useSSL=false&serverTimezone=Asia/Shanghai
+    username: root
+    password: 123456
+  slave:
+    dataSourceClassName: com.zaxxer.hikari.HikariDataSource
+    driverClassName: com.mysql.cj.jdbc.Driver
+    jdbcUrl: jdbc:mysql://192.168.100.100:3309/ai_code_platform?useSSL=false&serverTimezone=Asia/Shanghai
+    username: root
+    password: 123456
+
+#loadBalancers:
+#  random:
+#    type: RANDOM                     # 如果有多个从库，可配置轮询或随机算法
+# 2. 定义路由规则
+rules:
+  # ⚠️ 关键配置：声明单表规则，避免 "Table xxx not found" 报错
+  - !SINGLE
+    tables:
+      - "*.*"
+    defaultDataSource: master
+
+  # 读写分离规则
+  - !READWRITE_SPLITTING
+    dataSources:
+      readwrite_ds:
+        writeDataSourceName: master      # 写操作（INSERT/UPDATE/DELETE）走主库
+        readDataSourceNames:                 # 读操作（SELECT）走从库
+          - slave
+#        loadBalancerName: random         # 引用下方定义的 random 算法
+
+props:
+  sql-show: true  # 开发阶段建议开启，会在控制台打印真实执行的SQL及目标库，方便调试

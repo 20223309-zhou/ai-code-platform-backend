@@ -6,11 +6,9 @@ import com.ai.codeplatform.annotation.LogRecord;
 import com.ai.codeplatform.common.BaseResponse;
 import com.ai.codeplatform.constant.UserConstant;
 import com.ai.codeplatform.exception.BusinessException;
-import com.ai.codeplatform.model.entity.App;
 import com.ai.codeplatform.model.entity.SysOperationLog;
 import com.ai.codeplatform.model.entity.User;
 import com.ai.codeplatform.service.SysOperationLogService;
-import com.fasterxml.jackson.databind.ser.Serializers;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -30,6 +28,7 @@ import java.lang.reflect.Field;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 @Component
@@ -172,10 +171,17 @@ public class LogInterceptor {
      * @param logInfo 日志信息
      */
     private void saveLog(SysOperationLog logInfo) {
-        boolean isSuccess = sysOperationLogService.save(logInfo);
-        if (!isSuccess){
-            log.error("接口调用日志写入数据库失败");
-        }
+        // 异步保存日志 —— 虚拟线程
+        Thread.startVirtualThread(() -> {
+            try {
+                boolean isSuccess = sysOperationLogService.save(logInfo);
+                if (!isSuccess) {
+                    log.error("接口调用日志写入数据库失败");
+                }
+            } catch (Exception e) {
+                log.error("异步日志写入异常", e);
+            }
+        });
     }
 
     /**
