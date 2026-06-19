@@ -44,6 +44,7 @@ public class ChatHistoryController {
      * @param request        请求
      * @return 对话历史分页
      */
+    @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
     @GetMapping("/app/{appId}")
     public BaseResponse<Page<ChatHistory>> listAppChatHistory(@PathVariable Long appId,
                                                               @RequestParam(defaultValue = "10") int pageSize,
