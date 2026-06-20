@@ -35,7 +35,7 @@ public class GenerateLogoTool extends BaseTool {
             .connectTimeout(Duration.ofSeconds(5))
             .build();
 
-    @Tool("为网站生成SVG Logo图标，返回可直接嵌入HTML的SVG代码。从Iconify图标库搜索真实图标拼入Logo")
+    @Tool("为网站生成SVG Logo图标，返回可直接嵌入HTML的SVG代码。从Iconify图标库搜索真实图标拼入Logo，搜不到则生成抽象几何Logo")
     public String generateLogoSvg(
             @P("品牌名称或Logo上显示的文字")
             String brandName,
@@ -50,8 +50,8 @@ public class GenerateLogoTool extends BaseTool {
         // 1. 从 Iconify 搜索图标 SVG
         String iconSvg = fetchIconSvg(description);
         if (iconSvg == null) {
-            // fallback: 首字母图标
-            return generateFallbackSvg(brandName, primaryColor);
+            log.info("Iconify 搜不到图标，生成抽象几何 Logo");
+            return generateAbstractGeometricSvg(brandName, primaryColor);
         }
 
         // 2. 把图标颜色的 fill/ stroke 替换为品牌主色
@@ -169,17 +169,93 @@ public class GenerateLogoTool extends BaseTool {
     }
 
     /**
-     * Fallback：首字母 + 圆底 Logo
+     * 抽象几何 Logo：随机生成多套几何图形组合，看起来像真正的 Logo
      */
-    private String generateFallbackSvg(String brandName, String primary) {
+    private String generateAbstractGeometricSvg(String brandName, String primary) {
         String first = escapeXml(brandName.substring(0, 1));
+        String lighter = lightenColor(primary);
+        String darker = darkenColor(primary);
+        int variant = Math.abs((brandName.hashCode() * 31 + primary.hashCode()) % 6);
+
+        String icon = switch (variant) {
+            case 0 -> String.format("""
+                    <polygon points="28,6 46,16 46,36 28,46 10,36 10,16" fill="url(#g)"/>
+                    <polygon points="28,12 40,19 40,33 28,40 16,33 16,19" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1.2"/>
+                    <circle cx="28" cy="26" r="6" fill="rgba(255,255,255,0.25)"/>
+                    """);
+            case 1 -> String.format("""
+                    <circle cx="18" cy="30" r="16" fill="%s" opacity="0.3"/>
+                    <circle cx="34" cy="30" r="16" fill="%s" opacity="0.5"/>
+                    <circle cx="26" cy="30" r="14" fill="url(#g)"/>
+                    <text x="26" y="35" font-family="Arial,sans-serif" font-size="14" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">%s</text>
+                    """, primary, primary, first);
+            case 2 -> String.format("""
+                    <rect x="8" y="10" width="36" height="40" rx="6" fill="url(#g)" transform="rotate(15, 26, 30)"/>
+                    <rect x="14" y="16" width="24" height="28" rx="4" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1.5" transform="rotate(15, 26, 30)"/>
+                    """);
+            case 3 -> String.format("""
+                    <path d="M26,4 L44,16 L44,36 L26,48 L8,36 L8,16 Z" fill="url(#g)"/>
+                    <path d="M26,10 L38,18 L38,34 L26,42 L14,34 L14,18 Z" fill="%s" opacity="0.5"/>
+                    """, lighter);
+            case 4 -> String.format("""
+                    <circle cx="26" cy="30" r="22" fill="none" stroke="url(#g)" stroke-width="3"/>
+                    <circle cx="26" cy="30" r="14" fill="url(#g)" opacity="0.8"/>
+                    <circle cx="26" cy="30" r="6" fill="white" opacity="0.3"/>
+                    """);
+            default -> String.format("""
+                    <rect x="6" y="8" width="40" height="44" rx="8" fill="url(#g)"/>
+                    <rect x="14" y="16" width="24" height="28" rx="4" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="1"/>
+                    <circle cx="14" cy="16" r="3" fill="white" opacity="0.3"/>
+                    <circle cx="38" cy="44" r="4" fill="white" opacity="0.2"/>
+                    """);
+        };
         return String.format("""
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" width="200" height="60">
-                  <rect x="4" y="6" width="44" height="48" rx="10" fill="%s"/>
-                  <text x="26" y="34" font-family="Arial,sans-serif" font-size="22" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">%s</text>
+                  <defs>
+                    <linearGradient id="g" x1="0%%" y1="0%%" x2="100%%" y2="100%%">
+                      <stop offset="0%%" stop-color="%s"/>
+                      <stop offset="100%%" stop-color="%s"/>
+                    </linearGradient>
+                    <filter id="s">
+                      <feDropShadow dx="1" dy="2" stdDeviation="2" flood-opacity="0.25"/>
+                    </filter>
+                  </defs>
+                  <g filter="url(#s)">
+                    %s
+                  </g>
                   <text x="58" y="38" font-family="Arial,sans-serif" font-size="24" font-weight="bold" fill="%s" dominant-baseline="middle">%s</text>
                 </svg>
-                """, primary, first, primary, escapeXml(brandName));
+                """, lighter, darker, icon, primary, escapeXml(brandName));
+    }
+
+    private String lightenColor(String hex) {
+        if (hex == null || !hex.startsWith("#") || hex.length() < 7) return "#7FAAFF";
+        try {
+            int r = Integer.parseInt(hex.substring(1, 3), 16);
+            int g = Integer.parseInt(hex.substring(3, 5), 16);
+            int b = Integer.parseInt(hex.substring(5, 7), 16);
+            r = Math.min(255, (int) (r + (255 - r) * 0.6));
+            g = Math.min(255, (int) (g + (255 - g) * 0.6));
+            b = Math.min(255, (int) (b + (255 - b) * 0.6));
+            return String.format("#%02X%02X%02X", r, g, b);
+        } catch (Exception e) {
+            return "#7FAAFF";
+        }
+    }
+
+    private String darkenColor(String hex) {
+        if (hex == null || !hex.startsWith("#") || hex.length() < 7) return "#2D4FC7";
+        try {
+            int r = Integer.parseInt(hex.substring(1, 3), 16);
+            int g = Integer.parseInt(hex.substring(3, 5), 16);
+            int b = Integer.parseInt(hex.substring(5, 7), 16);
+            r = Math.max(0, (int) (r * 0.5));
+            g = Math.max(0, (int) (g * 0.5));
+            b = Math.max(0, (int) (b * 0.5));
+            return String.format("#%02X%02X%02X", r, g, b);
+        } catch (Exception e) {
+            return "#2D4FC7";
+        }
     }
 
     private String escapeXml(String input) {

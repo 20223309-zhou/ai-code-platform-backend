@@ -191,7 +191,17 @@ public class UserController {
         if (deleteRequest == null || deleteRequest.getId() <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
+        User user = userService.getById(deleteRequest.getId());
+        if (user == null){
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR,"用户不存在");
+        }
+        if (user.getUserRole().equals(UserConstant.ADMIN_ROLE)) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "非法的删除请求！");
+        }
         boolean b = userService.removeById(deleteRequest.getId());
+        if (!b){
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "用户删除失败");
+        }
         return ResultUtils.success(b);
     }
 
