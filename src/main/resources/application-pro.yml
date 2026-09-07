@@ -63,7 +63,7 @@ langchain4j:
       log-responses: false
       timeout: PT120S
     streaming-chat-model:
-      max-tokens: 8192
+      max-tokens: 62768
       base-url: ${AI_BASE_URL}
       api-key: ${AI_API_KEY}
       model-name: ${AI_MODEL_NAME}

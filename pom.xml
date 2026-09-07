@@ -114,6 +114,12 @@
             <artifactId>langchain4j-embeddings-bge-small-zh-v15</artifactId>
             <version>1.15.0-beta25</version>
         </dependency>
+        <!-- langchain4j agentic 支持 -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-agentic</artifactId>
+            <version>1.15.0-beta25</version>
+        </dependency>
         <!-- langchain4j reactor 支持 -->
         <dependency>
             <groupId>dev.langchain4j</groupId>

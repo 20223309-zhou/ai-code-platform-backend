@@ -20,6 +20,7 @@ import com.ai.codeplatform.exception.ErrorCode;
 import com.ai.codeplatform.manager.CancelGenerationManager;
 import com.ai.codeplatform.model.enums.CodeGenTypeEnum;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
+import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.response.*;
 import dev.langchain4j.service.TokenStream;
@@ -32,6 +33,7 @@ import reactor.core.publisher.Flux;
 import java.io.File;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 /**
  * AI 代码生成外观类，组合生成和保存功能
@@ -62,26 +64,30 @@ public class AiCodeGeneratorFacade {
         }
         // 根据 appId 获取对应的 AI 服务实例
         AiCodeGeneratorService aiCodeGeneratorService = aiCodeGeneratorServiceFactory.getAiCodeGeneratorService(appId, codeGenTypeEnum);
+        // 把图片注入记忆：langchain4j 对 @UserMessage UserMessage 参数会序列化为 toString() 导致图片丢失，
+        // 因此图片改由记忆(ChatMemory)传入，文本仍通过 @UserMessage String 参数传入
+        aiCodeGeneratorServiceFactory.addUserImagesToMemory(appId, codeGenTypeEnum, userMessage);
+        String userText = toText(userMessage);
         return switch (codeGenTypeEnum) {
             case HTML -> {
                 // 预创建目录，确保修改场景下工具能定位到项目目录
                 String htmlPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/html_" + appId;
                 FileUtil.mkdir(htmlPath);
-                TokenStream codeStream = aiCodeGeneratorService.generateHtmlCodeStream(appId, userMessage);
+                TokenStream codeStream = aiCodeGeneratorService.generateHtmlCodeStream(appId, userText);
                 yield processTokenStream(codeStream, CodeGenTypeEnum.HTML, appId);
             }
             case MULTI_FILE -> {
                 // 先创建项目目录，确保工具调用时目录已存在
                 String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/multi_file_" + appId;
                 FileUtil.mkdir(projectPath);
-                TokenStream codeStream = aiCodeGeneratorService.generateMultiFileCodeStream(appId, userMessage);
+                TokenStream codeStream = aiCodeGeneratorService.generateMultiFileCodeStream(appId, userText);
                 yield processTokenStream(codeStream, CodeGenTypeEnum.MULTI_FILE, appId);
             }
             case VUE_PROJECT -> {
                 // 先创建项目目录，确保工具调用时目录已存在
                 String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/vue_project_" + appId;
                 FileUtil.mkdir(projectPath);
-                TokenStream codeStream = aiCodeGeneratorService.generateVueProjectCodeStream(appId, userMessage);
+                TokenStream codeStream = aiCodeGeneratorService.generateVueProjectCodeStream(appId, userText);
                 yield processTokenStream(codeStream, appId);
             }
             default -> {
@@ -158,6 +164,7 @@ public class AiCodeGeneratorFacade {
                         }
                         cancelGenerationManager.remove(appId);
                         String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/vue_project_" + appId;
+                        // 同步构建vue项目
                         vueProjectBuilder.buildProject(projectPath);
                         sink.complete();
                     })
@@ -183,8 +190,9 @@ public class AiCodeGeneratorFacade {
         AtomicBoolean writeToolInvoked = new AtomicBoolean(false);
         return Flux.create(sink -> {
             tokenStream
+                    // 处理AI响应的信息
                     .onPartialResponseWithContext((PartialResponse partialResponse, PartialResponseContext context) -> {
-                        // 检查是否已取消生成，若取消则终止流
+                        // 检查用户是否已取消生成，若取消则终止流
                         if (cancelGenerationManager.isCancelled(appId)) {
                             context.streamingHandle().cancel();
                             log.info("生成阶段，用户取消生成，取消任务：{}", appId);
@@ -195,9 +203,12 @@ public class AiCodeGeneratorFacade {
                         codeBuilder.append(partialResponse.text());
                         // 封装AI响应消息并发送到流中
                         AiResponseMessage aiResponseMessage = new AiResponseMessage(partialResponse.text());
+                        // 转为json字符串继续交给下游处理
                         sink.next(JSONUtil.toJsonStr(aiResponseMessage));
                     })
+                    // 处理AI的思考信息
                     .onPartialThinkingWithContext((PartialThinking partialThinking,PartialThinkingContext context) -> {
+                        // 检查用户是否已取消生成，若取消则终止流
                         if (cancelGenerationManager.isCancelled(appId)) {
                             context.streamingHandle().cancel();
                             log.info("思考阶段，用户取消生成，取消任务：{}", appId);
@@ -205,12 +216,14 @@ public class AiCodeGeneratorFacade {
                             sink.complete();
                             return;
                         }
+                        // 将AI思考过程封装为map后，转为json字符串给下游处理
                         Map<String, String> thinkingMsg = Map.of(
                                 "type", StreamMessageTypeEnum.THINKING.getValue(),
                                 "data", partialThinking.text()
                         );
                         sink.next(JSONUtil.toJsonStr(thinkingMsg));
                     })
+                    // 处理工具调用信息，标记写文件工具被调用
                     .onPartialToolCallWithContext((PartialToolCall partialToolCall, PartialToolCallContext context) -> {
                         if (cancelGenerationManager.isCancelled(appId)) {
                             context.streamingHandle().cancel();
@@ -305,5 +318,22 @@ public class AiCodeGeneratorFacade {
 //                .doOnCancel(() -> cancelGenerationManager.remove(appId))
 //                .doOnError(e -> cancelGenerationManager.remove(appId));
 //    }
+
+    /**
+     * 从多模态 UserMessage 中提取纯文本内容（忽略图片等二进制内容），
+     * 用于作为 {@code @UserMessage String} 参数传给 AI 服务。
+     * <p>
+     * 注意：不能使用 {@code UserMessage.singleText()}，该方法在含图片的多模态消息上会抛出异常。
+     * 图片由 {@link AiCodeGeneratorServiceFactory#addUserImagesToMemory} 单独注入 ChatMemory。
+     *
+     * @param userMessage 包含文本和图片的用户消息
+     * @return 拼接后的纯文本
+     */
+    private String toText(UserMessage userMessage) {
+        return userMessage.contents().stream()
+                .filter(content -> content instanceof TextContent)
+                .map(content -> ((TextContent) content).text())
+                .collect(Collectors.joining("\n"));
+    }
 
 }

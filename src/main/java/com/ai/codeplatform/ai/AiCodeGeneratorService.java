@@ -75,7 +75,7 @@ public interface AiCodeGeneratorService {
      * @return 生成的代码结果
      */
     @SystemMessage(fromResource = "prompt/codegen-multi-file-system-prompt.txt")
-    TokenStream generateMultiFileCodeStream(@MemoryId Long appId, @UserMessage dev.langchain4j.data.message.UserMessage userMessage);
+    TokenStream generateMultiFileCodeStream(@MemoryId Long appId, @UserMessage String userMessage);
 
     /**
      * 生成 HTML 代码（流式）
@@ -84,7 +84,7 @@ public interface AiCodeGeneratorService {
      * @return 生成的代码结果
      */
     @SystemMessage(fromResource = "prompt/codegen-html-system-prompt.txt")
-    TokenStream generateHtmlCodeStream(@MemoryId Long appId, @UserMessage dev.langchain4j.data.message.UserMessage userMessage);
+    TokenStream generateHtmlCodeStream(@MemoryId Long appId, @UserMessage String userMessage);
 
     /**
      * 生成 Vue 项目代码（流式）
@@ -94,14 +94,5 @@ public interface AiCodeGeneratorService {
      */
     @SystemMessage(fromResource = "prompt/codegen-vue-project-system-prompt.txt")
     TokenStream generateVueProjectCodeStream(@MemoryId long appId, @UserMessage String userMessage);
-
-    /**
-     * 生成 Vue 项目代码（流式）
-     *
-     * @param userMessage 用户消息
-     * @return 生成过程的流式响应
-     */
-    @SystemMessage(fromResource = "prompt/codegen-vue-project-system-prompt.txt")
-    TokenStream generateVueProjectCodeStream(@MemoryId long appId, @UserMessage dev.langchain4j.data.message.UserMessage userMessage);
 
 }
