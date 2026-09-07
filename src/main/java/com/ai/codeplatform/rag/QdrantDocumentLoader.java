@@ -4,7 +4,6 @@ import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import com.ai.codeplatform.exception.BusinessException;
 import com.ai.codeplatform.exception.ErrorCode;
-import com.ai.codeplatform.rag.config.QdrantConfig;
 import com.ai.codeplatform.rag.splitter.SplitExecutor;
 import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.segment.TextSegment;
@@ -16,6 +15,7 @@ import io.qdrant.client.grpc.JsonWithInt;
 import io.qdrant.client.grpc.Points;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Files;
@@ -24,7 +24,6 @@ import java.nio.file.Paths;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Component
@@ -42,8 +41,8 @@ public class QdrantDocumentLoader {
     @Resource
     private QdrantClient qdrantClient;
 
-    @Resource
-    private QdrantConfig qdrantConfig;
+    @Value("${qdrant.collection-name}")
+    private String collectionName;
 
     /**
      * 加载文档
@@ -122,7 +121,7 @@ public class QdrantDocumentLoader {
             Common.PointId offset = null;
             do {
                 Points.ScrollPoints.Builder scrollBuilder = Points.ScrollPoints.newBuilder()
-                        .setCollectionName(qdrantConfig.getCollectionName())
+                        .setCollectionName(collectionName)
                         .setLimit(limit)
                         .setWithVectors(Points.WithVectorsSelector.newBuilder().setEnable(false).build())
                         .setWithPayload(Points.WithPayloadSelector.newBuilder().setEnable(true).build());
