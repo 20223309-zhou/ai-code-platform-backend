@@ -37,12 +37,13 @@ public class RateLimitAspect {
 
     @Before("@annotation(rateLimit)")
     public void doBefore(JoinPoint point, RateLimit rateLimit) {
+        // 获取限流key
         String key = generateRateLimitKey(point, rateLimit);
         // 使用Redisson的分布式限流器，并为限流器设置key
         RRateLimiter rateLimiter = redissonClient.getRateLimiter(key);
-        rateLimiter.expire(Duration.ofHours(1)); // 1 小时后过期
         // 设置限流器参数：每个时间窗口允许的请求数和时间窗口
-        rateLimiter.trySetRate(RateType.OVERALL, rateLimit.rate(), rateLimit.rateInterval(), RateIntervalUnit.SECONDS);
+        // trySetRate 是 "不存在才设置" ,只有首次创建该 key 的限流器时会写入速率配置，后续调用直接跳过
+        rateLimiter.trySetRate(RateType.OVERALL, rateLimit.rate(), Duration.ofSeconds(rateLimit.rateInterval()),Duration.ofHours(1));
         // 尝试获取令牌，如果获取失败则限流
         if (!rateLimiter.tryAcquire(1)) {
             throw new BusinessException(ErrorCode.TOO_MANY_REQUEST, rateLimit.message());
@@ -71,8 +72,10 @@ public class RateLimitAspect {
                 try {
                     ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
                     if (attributes != null) {
+                        // 获取当前登录用户
                         HttpServletRequest request = attributes.getRequest();
                         User loginUser = userService.getLoginUser(request);
+                        // 拼接限流器key rate_limit:user:{userId}
                         keyBuilder.append("user:").append(loginUser.getId());
                     } else {
                         // 无法获取请求上下文，使用IP限流
