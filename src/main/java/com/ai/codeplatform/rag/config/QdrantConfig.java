@@ -7,6 +7,7 @@ import io.qdrant.client.QdrantClient;
 import io.qdrant.client.QdrantGrpcClient;
 import io.qdrant.client.grpc.Collections;
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.Resource;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -38,17 +39,26 @@ public class QdrantConfig {
     }
 
     /**
+     * 共享的 Qdrant 客户端（供集合初始化与文档遍历 scroll 复用）
+     */
+    @Bean
+    public QdrantClient qdrantClient() {
+        QdrantGrpcClient grpcClient = QdrantGrpcClient.newBuilder(host, port, false)
+                .build();
+        return new QdrantClient(grpcClient);
+    }
+
+    @Resource
+    private QdrantClient qdrantClient;
+
+    /**
      * 应用启动时自动创建集合（如果不存在）
      */
     @PostConstruct
     public void initCollection() {
         try {
-            // 创建 Qdrant 客户端
-            QdrantGrpcClient grpcClient = QdrantGrpcClient.newBuilder(host, port, false)
-                    .build();
-            QdrantClient client = new QdrantClient(grpcClient);
             // 检查集合是否存在
-            boolean exists = client.collectionExistsAsync(collectionName).get();
+            boolean exists = qdrantClient.collectionExistsAsync(collectionName).get();
 
             if (!exists) {
                 log.info("创建 Qdrant 集合: {}", collectionName);
@@ -57,7 +67,7 @@ public class QdrantConfig {
                 Collections.Distance distance = parseDistance(distanceType);
 
                 // 创建集合
-                client.createCollectionAsync(
+                qdrantClient.createCollectionAsync(
                         collectionName,
                         Collections.VectorParams.newBuilder()
                                 .setSize(vectorSize)
@@ -69,8 +79,6 @@ public class QdrantConfig {
             } else {
                 log.info("Qdrant 集合已存在: {}", collectionName);
             }
-
-            client.close();
 
         } catch (Exception e) {
             log.error("初始化 Qdrant 集合失败", e);

@@ -4,13 +4,16 @@ import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import com.ai.codeplatform.exception.BusinessException;
 import com.ai.codeplatform.exception.ErrorCode;
+import com.ai.codeplatform.rag.config.QdrantConfig;
 import com.ai.codeplatform.rag.splitter.SplitExecutor;
 import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.embedding.onnx.bgesmallzhv15.BgeSmallZhV15EmbeddingModel;
-import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
-import dev.langchain4j.store.embedding.EmbeddingSearchResult;
 import dev.langchain4j.store.embedding.EmbeddingStore;
+import io.qdrant.client.QdrantClient;
+import io.qdrant.client.grpc.Common;
+import io.qdrant.client.grpc.JsonWithInt;
+import io.qdrant.client.grpc.Points;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -18,6 +21,7 @@ import org.springframework.stereotype.Component;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -34,6 +38,12 @@ public class QdrantDocumentLoader {
 
     @Resource
     private SplitExecutor splitExecutor;
+
+    @Resource
+    private QdrantClient qdrantClient;
+
+    @Resource
+    private QdrantConfig qdrantConfig;
 
     /**
      * 加载文档
@@ -98,37 +108,59 @@ public class QdrantDocumentLoader {
 
     /**
      * 获取 Qdrant 中已存在的文件路径
+     *
+     * 注意：之前用“零向量 search + maxResults(10000)”枚举全量点，但 search 默认会回传每条命中的
+     * 512 维向量，1 万条 ≈ 20MB，超过 gRPC 默认 4MB 单条消息上限，导致
+     * RESOURCE_EXHAUSTED: Decompressed gRPC message exceeds maximum size 4194304。
+     * 改用 Qdrant 的 scroll 接口：专为遍历全量点设计，支持分页，且 withVector=false 不返回向量，
+     * 响应体极小，从根本上规避 4MB 限制。
      */
     private Set<String> getExistingFilePaths() {
         try {
-            // 用零向量搜索全部已有文件（BgeSmallZhV15 维度为 512）
-            float[] zeroVector = new float[512];
-            EmbeddingSearchRequest request = EmbeddingSearchRequest.builder()
-                    .queryEmbedding(Embedding.from(zeroVector))
-                    .maxResults(10000)
-                    .minScore(0.0)
-                    .build();
+            Set<String> paths = new LinkedHashSet<>();
+            int limit = 256;
+            Common.PointId offset = null;
+            do {
+                Points.ScrollPoints.Builder scrollBuilder = Points.ScrollPoints.newBuilder()
+                        .setCollectionName(qdrantConfig.getCollectionName())
+                        .setLimit(limit)
+                        .setWithVectors(Points.WithVectorsSelector.newBuilder().setEnable(false).build())
+                        .setWithPayload(Points.WithPayloadSelector.newBuilder().setEnable(true).build());
+                if (offset != null) {
+                    scrollBuilder.setOffset(offset);
+                }
 
-            EmbeddingSearchResult<TextSegment> result = embeddingStore.search(request);
-            //result.matches() 返回的是 List<EmbeddingMatch<TextSegment>>，其中每个 EmbeddingMatch 包含：
-            //1.embedded() - 嵌入的文本片段（TextSegment），包含：
-            //  文本内容
-            //  元数据（metadata），如文件名、来源等
-            //2.score() - 相似度分数（0-1之间）
-            //3.embeddingId() - 向量ID
-            //4.embedding() - 向量本身
-            return result.matches().stream()
-                    .map(EmbeddingMatch -> {
-                        TextSegment embedded = EmbeddingMatch.embedded();
-                        return embedded;
-                    })
-                    .map(textSegment -> {
-                        return textSegment.metadata();
-                    })
-                    .map(metadata -> metadata.getString("file_name"))
-                    .filter(path -> path != null && !path.isEmpty())
-                    .collect(Collectors.toSet());
+                Points.ScrollResponse response = qdrantClient.scrollAsync(scrollBuilder.build()).get();
+                List<Points.RetrievedPoint> points = response.getResultList();
+                if (points.isEmpty()) {
+                    break;
+                }
 
+                for (Points.RetrievedPoint p : points) {
+                    JsonWithInt.Value v = p.getPayloadMap().get("file_name");
+                    if (v != null) {
+                        String fileName = v.getStringValue();
+                        if (fileName != null && !fileName.isEmpty()) {
+                            paths.add(fileName);
+                        }
+                    }
+                }
+
+                // 下一页游标 = 本页最后一条记录的 id
+                Common.PointId lastId = points.get(points.size() - 1).getId();
+                if (lastId.getUuid() != null && !lastId.getUuid().isEmpty()) {
+                    offset = Common.PointId.newBuilder().setUuid(lastId.getUuid()).build();
+                } else {
+                    offset = Common.PointId.newBuilder().setNum(lastId.getNum()).build();
+                }
+
+                // 本页不足 limit 条，说明已是最后一页
+                if (points.size() < limit) {
+                    break;
+                }
+            } while (true);
+
+            return paths;
         } catch (Exception e) {
             log.warn("获取现有文件路径失败", e);
             return Set.of();
