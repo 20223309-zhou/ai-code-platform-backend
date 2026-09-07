@@ -2,6 +2,7 @@ package com.ai.codeplatform.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.ai.codeplatform.ai.model.message.ToolExecutedMessage;
 import com.ai.codeplatform.ai.model.message.ToolRequestMessage;
@@ -15,12 +16,16 @@ import com.ai.codeplatform.mapper.ChatHistoryOriginalMapper;
 import com.ai.codeplatform.service.ChatHistoryOriginalService;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.Content;
+import dev.langchain4j.data.message.ImageContent;
+import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -264,7 +269,14 @@ public class ChatHistoryOriginalServiceImpl extends ServiceImpl<ChatHistoryOrigi
             ChatHistoryMessageTypeEnum messageTypeEnum = ChatHistoryMessageTypeEnum.getEnumByValue(messageType);
             switch (messageTypeEnum) {
                 case USER -> {
-                    chatMemory.add(UserMessage.from(history.getMessage()));
+                    // 用户消息可能是多模态的（文本 + 图片），需要还原成 Content 列表，
+                    // 否则图片会退化成一串 JSON 文本，模型看不到图
+                    List<Content> contents = deserializeContents(history.getMessage());
+                    if (contents.isEmpty()) {
+                        chatMemory.add(UserMessage.from(history.getMessage()));
+                    } else {
+                        chatMemory.add(UserMessage.from(contents));
+                    }
                     loadedCount++;
                 }
                 case AI -> {
@@ -298,6 +310,40 @@ public class ChatHistoryOriginalServiceImpl extends ServiceImpl<ChatHistoryOrigi
             }
         }
         return loadedCount;
+    }
+
+    /**
+     * 将入库时序列化的多模态消息 JSON 还原为 Content 列表。
+     * 序列化格式见 AppServiceImpl#chatToGenCode：
+     * 文本 {"type":"text","text":"..."}、图片 {"type":"image","mimeType":"...","url":"..."}、
+     * 文档 {"type":"md","text":"..."}
+     *
+     * @param message 数据库中的消息内容
+     * @return 还原后的内容列表，非多模态 JSON 时返回空列表（调用方会退回纯文本处理）
+     */
+    private List<Content> deserializeContents(String message) {
+        if (StrUtil.isBlank(message) || !JSONUtil.isJsonArray(message)) {
+            return Collections.emptyList();
+        }
+        List<Content> contents = new ArrayList<>();
+        for (Object item : JSONUtil.parseArray(message)) {
+            if (!(item instanceof JSONObject contentMap)) {
+                continue;
+            }
+            String type = contentMap.getStr("type");
+            if ("image".equals(type)) {
+                String url = contentMap.getStr("url");
+                if (StrUtil.isNotBlank(url)) {
+                    contents.add(new ImageContent(url));
+                }
+            } else {
+                String text = contentMap.getStr("text");
+                if (StrUtil.isNotBlank(text)) {
+                    contents.add(new TextContent(text));
+                }
+            }
+        }
+        return contents;
     }
 
 }

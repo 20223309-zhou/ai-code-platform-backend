@@ -146,7 +146,9 @@ const router = createRouter({
 - **responsive-breakpoints** — 需要写响应式布局时
 - **design-tokens** — 需要定义颜色/间距/阴影时
 - **micro-interactions** — 需要添加动画/过渡反馈时
-- **ui-reference** — 用户上传了参考图片或提供了参考网站URL时：先分析参考素材，再调用 WebFetchTool 提取配色/字体/布局结构
+- **ui-reference** — 需要参考外部素材时：
+  - 用户提供了**网站 URL** → 调用 WebFetchTool 提取配色/字体/布局结构
+  - 用户上传了**参考图片** → 图片内容已随消息一起传入，直接用你的视觉能力观察它，提取配色/字体/布局结构。**严禁对图片 URL 调用 WebFetchTool**，它只能抓取网页文本，抓图片只会拿到无意义的二进制数据
 - **code-audit** — 代码生成完成后，检查标签闭合、CSS 冗余、console 残留
 - **responsive-check** — 代码生成完成后，验证 4 个断点下的布局表现
 

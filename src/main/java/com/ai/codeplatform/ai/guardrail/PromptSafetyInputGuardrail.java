@@ -1,5 +1,6 @@
 package com.ai.codeplatform.ai.guardrail;
 
+import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.guardrail.InputGuardrail;
 import dev.langchain4j.guardrail.InputGuardrailResult;
@@ -7,6 +8,7 @@ import dev.langchain4j.guardrail.InputGuardrailResult;
 import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * 输入内容安全检查
@@ -30,7 +32,12 @@ public class PromptSafetyInputGuardrail implements InputGuardrail {
 
     @Override
     public InputGuardrailResult validate(UserMessage userMessage) {
-        String input = userMessage.singleText();
+        // 多模态消息（含 ImageContent）不能直接调 singleText()，langchain4j 会抛
+        // RuntimeException: Expecting single text content，这里只提取文本部分做安全校验
+        String input = userMessage.contents().stream()
+                .filter(content -> content instanceof TextContent)
+                .map(content -> ((TextContent) content).text())
+                .collect(Collectors.joining("\n"));
         // 检查输入长度
         if (input.length() > 20000) {
             return fatal("输入内容过长，不要超过 20000 字");
