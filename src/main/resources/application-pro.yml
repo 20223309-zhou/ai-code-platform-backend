@@ -12,7 +12,7 @@ spring:
   #数据库配置
 #  datasource:
 #    driver-class-name: com.mysql.cj.jdbc.Driver
-#    url: jdbc:mysql://${SPRING_MYSQL_URL}:${SPRING_MYSQL_PORT}/ai_code_platform?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8
+#    url: jdbc:mysql://${SPRING_MYSQL_URL}:${SPRING_MYSQL_PORT}/ai_code_platform?serverTimezone=Asia/Shanghai&forceConnectionTimeZoneToSession=true&useUnicode=true&characterEncoding=utf-8
 #    username: root
 #    password: ${SPRING_MYSQL_PASSWORD}
   # 数据库配置（配置主从读写分离的路由规则）
