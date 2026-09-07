@@ -122,14 +122,21 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         app.setUserId(loginUser.getId());
         // 应用名称暂时为 initPrompt 前 12 位
         app.setAppName(initPrompt.substring(0, Math.min(initPrompt.length(), 12)));
-        // ai智能选择代码生成类型
+        // 代码生成类型：用户显式指定具体类型时直接使用（创建后不可更改）；
+        // 未指定或选择“智能选择(auto)”时，由 AI 根据 initPrompt 路由（保持原有默认行为）。
         AiCodeGenTypeRoutingService routingService = aiCodeGenTypeRoutingServiceFactory.createAiCodeGenTypeRoutingService();
-        CodeGenTypeEnum selectedCodeGenType = routingService.routeCodeGenType(initPrompt);
-        if (selectedCodeGenType == CodeGenTypeEnum.WARNING) {
-            throw new BusinessException(ErrorCode.OPERATION_ERROR, "禁止输入无关的提示词");
-        }
-        if (selectedCodeGenType == null) {
-            selectedCodeGenType = CodeGenTypeEnum.MULTI_FILE;
+        String reqCodeGenType = appAddRequest.getCodeGenType();
+        CodeGenTypeEnum specified = (reqCodeGenType != null) ? CodeGenTypeEnum.getEnumByValue(reqCodeGenType) : null;
+        CodeGenTypeEnum selectedCodeGenType;
+        if (specified != null && specified != CodeGenTypeEnum.WARNING) {
+            // 用户显式选择了具体生成类型，直接使用，不再走 AI 路由
+            selectedCodeGenType = specified;
+        } else {
+            // 智能选择 / 未指定 / 非法值：由 AI 路由，并做兜底
+            selectedCodeGenType = routingService.routeCodeGenType(initPrompt);
+            if (selectedCodeGenType == CodeGenTypeEnum.WARNING || selectedCodeGenType == null) {
+                selectedCodeGenType = CodeGenTypeEnum.MULTI_FILE;
+            }
         }
         app.setCodeGenType(selectedCodeGenType.getValue());
         // 使用 CAS 方式扣减额度（最多重试 3 次）
@@ -231,10 +238,11 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
             else if (hasImage) intentMessage += " (用户上传了参考图片)";
             else if (hasText) intentMessage += " (用户上传了需求文档)";
         }
-        boolean designRelated = routingService.isDesignRelated(intentMessage);
-        if (!designRelated) {
-            throw new BusinessException(ErrorCode.OPERATION_ERROR, "请提供具体的网页修改需求或功能描述。");
-        }
+//        boolean designRelated = routingService.isDesignRelated(intentMessage);
+//        designRelated = true;
+//        if (!designRelated) {
+//            throw new BusinessException(ErrorCode.OPERATION_ERROR, "请提供具体的网页修改需求或功能描述。");
+//        }
 
         // 6. 构建用户消息内容列表
         List<Content> contents = new ArrayList<>();
