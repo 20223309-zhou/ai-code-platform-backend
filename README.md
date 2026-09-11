@@ -12,7 +12,9 @@
 
 iCodeAI  是一个基于 **Langchain4j + RAG + Qdrant + Spring Boot + Vue 3 + 大模型能力** 构建的智能应用生成平台。
 
-<img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/9ef2989b-b1b6-4edd-94ee-6b65e83365e3" />
+<img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/1434a6c3-128f-4bf8-aa12-1cb0d56583a8" />
+
+
 
 
 用户可以通过自然语言描述需求，快速生成网页应用原型，并继续通过对话方式迭代修改。平台同时支持上传图片/文本文件作为参考资料、预览生成结果、下载源码、部署应用、模板复用以及后台管理等功能。
@@ -345,52 +347,59 @@ npm run build-only
 
 - 首页：输入需求、上传参考资料、查看我的作品
 
-  <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/6c308814-7631-42cc-97bc-0b336079c5e4" />
+ <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/2216ae4f-6ab8-4f9a-8c83-3f3c4dbce59b" />
+
 
 
 - 登录页：账号密码 + 验证码登录
 
- <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/495eb7b3-070e-4616-bbe1-2f0445b7fb70" />
+<img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/b51772e1-7ffb-40d9-bfc7-d55c3aa8d9df" />
+
 
 - 注册页：用户注册
 
-  <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/4206e3ce-a2e3-4e92-8b20-68183c402bc6" />
+ <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/eae6289d-4499-4fc0-af8e-fac0b1923999" />
 
 - 个人中心：查看与修改个人资料
 
- <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/55afe40c-6ba5-4df6-a691-dbf08758305e" />
+<img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/107a620a-3d48-459d-977f-46d70bba596a" />
+
 
 
 - 应用对话页：继续生成、上传附件、停止生成、部署、下载、预览
 
-  <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/ef3fad4f-c02c-4cb4-966d-982222ef43e7" />
+<img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/8bec3379-bcb8-4682-888b-749527754c63" />
+
 
 
 - 模板广场：查看精选模板并复用
 
- <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/8aa76679-2bdf-4fbc-8756-c38dddde70bf" />
+<img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/a02c46bb-05c0-4538-81a1-7b147e76d9ce" />
 
 
 ### 后台页面
 
 - 用户管理
 
-  <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/35bc14cf-2bf9-489b-8c9f-06053027a18c" />
+<img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/6a765bfd-f800-4f3d-bda6-53b7dc08e7fa" />
+
 
 
 - 应用管理
 
- <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/fd58de41-2b3c-4548-8115-d9ed545f5950" />
+ <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/822410b5-dc97-4675-9c40-ac2c7c1dc75e" />
+
 
 
 - 日志管理
 
-  <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/350afd0f-9d3c-4fb0-8475-a69c3d7257d7" />
+ <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/77c75823-cd39-4932-988b-dbf507233658" />
 
 
 - 统计页面
 
-  <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/8190c79c-f8f3-4d14-bf27-4f911150f044" />
+  <img width="2560" height="1199" alt="image" src="https://github.com/user-attachments/assets/7da4a5f5-9883-413b-8d8f-3c72ab356b9e" />
+
 
 
 ---
