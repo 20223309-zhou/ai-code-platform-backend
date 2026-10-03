@@ -3,13 +3,13 @@ dataSources:
   master:
     dataSourceClassName: com.zaxxer.hikari.HikariDataSource
     driverClassName: com.mysql.cj.jdbc.Driver
-    jdbcUrl: jdbc:mysql://192.168.100.100:3308/ai_code_platform?useSSL=false&serverTimezone=Asia/Shanghai&forceConnectionTimeZoneToSession=true
+    jdbcUrl: jdbc:mysql://192.168.100.100:3308/ai_code_platform?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&forceConnectionTimeZoneToSession=true
     username: root
     password: 123456
   slave:
     dataSourceClassName: com.zaxxer.hikari.HikariDataSource
     driverClassName: com.mysql.cj.jdbc.Driver
-    jdbcUrl: jdbc:mysql://192.168.100.100:3309/ai_code_platform?useSSL=false&serverTimezone=Asia/Shanghai&forceConnectionTimeZoneToSession=true
+    jdbcUrl: jdbc:mysql://192.168.100.100:3309/ai_code_platform?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&forceConnectionTimeZoneToSession=true
     username: root
     password: 123456
 
@@ -34,4 +34,4 @@ rules:
 #        loadBalancerName: random         # 引用下方定义的 random 算法
 
 props:
-  sql-show: true  # 开发阶段建议开启，会在控制台打印真实执行的SQL及目标库，方便调试
+  sql-show: false  # 开发阶段建议开启，会在控制台打印真实执行的SQL及目标库，方便调试

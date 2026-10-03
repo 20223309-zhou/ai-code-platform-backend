@@ -193,7 +193,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
      * @return
      */
     @Override
-    public Flux<String> chatToGenCode(Long appId, String message, User loginUser, MultipartFile[] files) {
+    public Flux<String> chatToGenCode(Long appId, String message, String modelName,User loginUser, MultipartFile[] files) {
         // 1. 参数校验
         if (appId == null || appId <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
@@ -301,7 +301,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         // 11. 注册取消标志
         cancelGenerationManager.register(appId);
         // 12. 调用 AI 生成代码（流式）
-        Flux<String> codeStream = aiCodeGeneratorFacade.generateAndSaveCodeStream(userMessage, codeGenTypeEnum, appId);
+        Flux<String> codeStream = aiCodeGeneratorFacade.generateAndSaveCodeStream(userMessage, codeGenTypeEnum, appId,modelName);
         // 13. 收集 AI 响应内容并在完成后记录到对话历史
         return streamHandlerExecutor
                 .doExecute(codeStream, chatHistoryService, chatHistoryOriginalService, appId, loginUser, codeGenTypeEnum)

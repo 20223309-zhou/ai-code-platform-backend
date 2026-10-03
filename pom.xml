@@ -108,6 +108,31 @@
             <artifactId>langchain4j-open-ai-spring-boot-starter</artifactId>
             <version>1.15.0-beta25</version>
         </dependency>
+        <!-- langchain4j easy-rag 支持 -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-easy-rag</artifactId>
+            <version>1.15.0-beta25</version>
+        </dependency>
+        <!-- langchain4j mcp 支持 -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-mcp</artifactId>
+            <version>1.15.0-beta25</version>
+            <exclusions>
+                <!--
+                  排除 JDK 版 HTTP 客户端：langchain4j-open-ai-spring-boot-starter 已排除它并改用
+                  langchain4j-http-client-spring-restclient。两者同时在类路径时，
+                  HttpClientBuilderLoader 会因发现两个 HttpClientBuilderFactory 而抛
+                  IllegalStateException（Conflict: multiple HTTP clients have been found）。
+                  MCP 只依赖 HttpClient 抽象，排除后自动走 Spring RestClient。
+                -->
+                <exclusion>
+                    <groupId>dev.langchain4j</groupId>
+                    <artifactId>langchain4j-http-client-jdk</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
         <!-- langchain4j bge-small嵌入模型支持 -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
