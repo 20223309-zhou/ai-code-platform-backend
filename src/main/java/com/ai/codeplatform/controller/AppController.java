@@ -16,6 +16,7 @@ import com.ai.codeplatform.exception.ErrorCode;
 import com.ai.codeplatform.manager.CancelGenerationManager;
 import com.ai.codeplatform.model.dto.app.*;
 import com.ai.codeplatform.model.entity.User;
+import com.ai.codeplatform.model.enums.ModelEnum;
 import com.ai.codeplatform.model.vo.AppVO;
 import com.ai.codeplatform.rag.RagSwitchHolder;
 import com.ai.codeplatform.ratelimiter.annotation.RateLimit;
@@ -39,6 +40,7 @@ import reactor.core.publisher.Mono;
 
 import java.io.File;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -131,6 +133,31 @@ public class AppController {
     }
 
     /**
+     * 获取模型列表
+     *
+     * @return 模型列表
+     */
+    @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
+    @GetMapping("/model/list")
+    public BaseResponse<Map<String,Object>> modelList(){
+        Map<String, Object> modelMap = new HashMap<>();
+        ModelEnum grok = ModelEnum.getEnumByProvider("grok");
+        ModelEnum deepseek = ModelEnum.getEnumByProvider("deepseek");
+        ModelEnum chatgpt = ModelEnum.getEnumByProvider("chatgpt");
+        // 将模型信息添加到 map 中（default 为布尔值，标识默认模型）
+        if (deepseek != null) {
+            modelMap.put("deepseek", Map.<String, Object>of("modelName", deepseek.getModelName(), "label", deepseek.getLabel(), "default", true));
+        }
+        if (grok != null) {
+            modelMap.put("grok", Map.<String, Object>of("modelName", grok.getModelName(), "label", grok.getLabel(), "default", false));
+        }
+        if (chatgpt != null) {
+            modelMap.put("chatgpt", Map.<String, Object>of("modelName", chatgpt.getModelName(), "label", chatgpt.getLabel(), "default", false));
+        }
+        return ResultUtils.success(modelMap);
+    }
+
+    /**
      * 聊天生成代码
      *
      * @param appId   应用ID
@@ -143,13 +170,20 @@ public class AppController {
     @PostMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> chatToGenCode(@RequestParam Long appId,
                                                        @RequestParam String message,
+                                                       @RequestParam(required = false) String modelName,
                                                        @RequestParam(required = false) Boolean useRag,
                                                        @RequestPart(value = "files",required = false)
                                                        MultipartFile[] files,
                                                        HttpServletRequest request) {
         // 保存Rag使用状态
         RagSwitchHolder.set(useRag != null ? useRag : false);
-        // 参数校验
+        // 参数校验：未指定模型时默认使用 DeepSeek（兼容未传 modelName 的调用方）
+        if (StrUtil.isBlank(modelName)) {
+            modelName = ModelEnum.DEEP_SEEK.getModelName();
+        }
+        if (ModelEnum.getEnumByModelName(modelName) == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "模型名称无效");
+        }
         if (appId == null || appId <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "应用ID无效");
         }
@@ -159,7 +193,7 @@ public class AppController {
         // 获取当前登录用户
         User loginUser = userService.getLoginUser(request);
         // 调用服务生成代码（流式）
-        Flux<String> contentFlux = appService.chatToGenCode(appId, message, loginUser,files);
+        Flux<String> contentFlux = appService.chatToGenCode(appId, message,modelName ,loginUser,files);
         // 转换为 ServerSentEvent 格式
         return contentFlux
                 .map(chunk -> {

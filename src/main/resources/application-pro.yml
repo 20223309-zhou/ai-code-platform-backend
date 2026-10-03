@@ -12,7 +12,7 @@ spring:
   #数据库配置
 #  datasource:
 #    driver-class-name: com.mysql.cj.jdbc.Driver
-#    url: jdbc:mysql://${SPRING_MYSQL_URL}:${SPRING_MYSQL_PORT}/ai_code_platform?serverTimezone=Asia/Shanghai&forceConnectionTimeZoneToSession=true&useUnicode=true&characterEncoding=utf-8
+#    url: jdbc:mysql://${SPRING_MYSQL_URL}:${SPRING_MYSQL_PORT}/ai_code_platform?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&forceConnectionTimeZoneToSession=true&useUnicode=true&characterEncoding=utf-8
 #    username: root
 #    password: ${SPRING_MYSQL_PASSWORD}
   # 数据库配置（配置主从读写分离的路由规则）
@@ -33,15 +33,23 @@ spring:
 # AI
 langchain4j:
   open-ai:
-    # 推理 AI 模型配置（用于复杂的推理任务）
+    # 推理 AI 模型配置（用于复杂的推理任务）—— 多模型：deepseek / grok / chatgpt
+    # 注意：键名必须与 ReasoningStreamingChatModelConfig 的字段一一对应，否则模型配置会全部绑定为 null
     reasoning-streaming-chat-model:
-      base-url: ${AI_BASE_URL}
-      api-key: ${AI_API_KEY}
-      model-name: ${AI_MODEL_NAME}
+      # 默认模型：DeepSeek（直连官方）
+      deepseek-base-url: ${BBLABU_BASE_URL}
+      deepseek-api-key: ${AI_API_KEY}
+      deepseek-model-name: ${AI_MODEL_NAME}
+      # Grok / ChatGPT 走 bblabu 网关
+      bblabu-base-url: ${BBLABU_BASE_URL}
+      grok-api-key: ${GROK_API_KEY}
+      grok-model-name: ${GROK_MODEL_NAME}
+      chatgpt-api-key: ${CHATGPT_API_KEY}
+      chatgpt-model-name: ${CHATGPT_MODEL_NAME}
       max-tokens: 62768
       temperature: 0.7
       log-requests: false
-      log-responses: true
+      log-responses: false
     # 智能路由 AI 模型配置（用于简单的分类任务）
     routing-chat-model:
       base-url: ${ROUTING_AI_BASE_URL}
@@ -61,14 +69,6 @@ langchain4j:
       model-name: ${AI_MODEL_NAME}
       log-requests: false
       log-responses: false
-      timeout: PT120S
-    streaming-chat-model:
-      max-tokens: 62768
-      base-url: ${AI_BASE_URL}
-      api-key: ${AI_API_KEY}
-      model-name: ${AI_MODEL_NAME}
-      log-requests: false
-      log-responses: true
       timeout: PT120S
 cos:
   client:

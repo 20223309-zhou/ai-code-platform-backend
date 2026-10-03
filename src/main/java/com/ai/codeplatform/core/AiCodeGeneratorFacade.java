@@ -58,15 +58,15 @@ public class AiCodeGeneratorFacade {
      * @param codeGenTypeEnum 生成类型
      * @param appId           应用 ID
      */
-    public Flux<String> generateAndSaveCodeStream(UserMessage userMessage, CodeGenTypeEnum codeGenTypeEnum, Long appId) {
+    public Flux<String> generateAndSaveCodeStream(UserMessage userMessage, CodeGenTypeEnum codeGenTypeEnum, Long appId,String modelName) {
         if (codeGenTypeEnum == null) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "生成类型为空");
         }
         // 根据 appId 获取对应的 AI 服务实例
-        AiCodeGeneratorService aiCodeGeneratorService = aiCodeGeneratorServiceFactory.getAiCodeGeneratorService(appId, codeGenTypeEnum);
+        AiCodeGeneratorService aiCodeGeneratorService = aiCodeGeneratorServiceFactory.getAiCodeGeneratorService(appId, codeGenTypeEnum,modelName);
         // 把图片注入记忆：langchain4j 对 @UserMessage UserMessage 参数会序列化为 toString() 导致图片丢失，
         // 因此图片改由记忆(ChatMemory)传入，文本仍通过 @UserMessage String 参数传入
-        aiCodeGeneratorServiceFactory.addUserImagesToMemory(appId, codeGenTypeEnum, userMessage);
+        aiCodeGeneratorServiceFactory.addUserImagesToMemory(appId, userMessage);
         String userText = toText(userMessage);
         return switch (codeGenTypeEnum) {
             case HTML -> {
