@@ -197,8 +197,8 @@ public class AiCodeGeneratorServiceFactory {
                     .chatMemoryStore(redisChatMemoryStore)
                     .maxMessages(MAX_MEMORY_MESSAGES)
                     .build();
-            // 从数据库加载历史对话到记忆中
-            chatHistoryOriginalService.loadOriginalChatHistoryToMemory(appId, chatMemory, 20);
+            // 从数据库加载历史对话到记忆中（按 token 预算回放，保证语义主线不丢）
+            chatHistoryOriginalService.loadOriginalChatHistoryToMemory(appId, chatMemory);
             return chatMemory;
         });
     }
