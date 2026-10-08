@@ -102,3 +102,11 @@ qdrant:
 frontend:
   homePageUrl: ${FRONTEND_HOME_PAGE_URL}
   authUrl: ${FRONTEND_AUTH_URL}
+
+# 会话历史回放预算（冷启动重建对话记忆时用）
+app:
+  chat-history:
+    replay-max-tokens: ${CHAT_HISTORY_REPLAY_MAX_TOKENS:64000}
+    scan-limit: ${CHAT_HISTORY_SCAN_LIMIT:400}
+    keep-user-ai-rounds: ${CHAT_HISTORY_KEEP_USER_AI_ROUNDS:10}
+    keep-tool-rounds: ${CHAT_HISTORY_KEEP_TOOL_ROUNDS:3}
