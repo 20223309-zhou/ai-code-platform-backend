@@ -18,6 +18,11 @@ iCodeAI  是一个基于 **Langchain4j + RAG + Qdrant + Spring Boot + Vue 3 + �
 
 用户可以通过自然语言描述需求，快速生成网页应用原型，并继续通过对话方式迭代修改。平台同时支持上传图片/文本文件作为参考资料、预览生成结果、下载源码、部署应用、模板复用以及后台管理等功能。
 
+---
+线上地址：http://www.icodeplay.site/
+
+---
+
 本仓库包含两个子项目：
 
 - `ai-code-platform-backend`：后端服务
