@@ -19,6 +19,16 @@ public class LoginUserVO implements Serializable {
     private String userAccount;
 
     /**
+     * 邮箱（可能为空：OAuth 用户、存量用户未绑定）
+     */
+    private String email;
+
+    /**
+     * 邮箱是否已经过本站验证：0 否，1 是
+     */
+    private int emailVerified;
+
+    /**
      * 用户昵称
      */
     private String userName;

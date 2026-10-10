@@ -7,6 +7,9 @@ public enum ErrorCode {
 
     SUCCESS(0, "ok"),
     PARAMS_ERROR(40000, "请求参数错误"),
+    // 独立错误码：验证码错误原先与"账号或密码错误"共用 PARAMS_ERROR，
+    // 前端只能靠正则匹配文案区分，后端改一个字就会失效。现在前端按 code 判断。
+    CAPTCHA_ERROR(40001, "验证码错误或已过期"),
     NOT_LOGIN_ERROR(40100, "未登录"),
     NO_AUTH_ERROR(40101, "无权限"),
     NOT_FOUND_ERROR(40400, "请求数据不存在"),

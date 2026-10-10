@@ -45,6 +45,20 @@ public class User implements Serializable {
     private String userAccount;
 
     /**
+     * 邮箱（统一小写归一化后存储）
+     */
+    @Column("email")
+    private String email;
+
+    /**
+     * 邮箱是否经本站验证：0 否，1 是
+     * 只有为 1 的邮箱才允许用于登录与找回密码。
+     * OAuth / 存量用户无邮箱时为 0，是"有邮箱但不可信"之外的真实"未验证"状态。
+     */
+    @Column("emailVerified")
+    private int emailVerified;
+
+    /**
      * GitHub ID（用于 OAuth 登录）
      */
     @Column("githubId")

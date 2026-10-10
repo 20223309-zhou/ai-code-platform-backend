@@ -5,6 +5,7 @@ import com.ai.codeplatform.exception.ErrorCode;
 import com.ai.codeplatform.model.entity.User;
 import com.ai.codeplatform.ratelimiter.annotation.RateLimit;
 import com.ai.codeplatform.service.UserService;
+import com.ai.codeplatform.utils.IpUtils;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -39,14 +40,23 @@ public class RateLimitAspect {
     public void doBefore(JoinPoint point, RateLimit rateLimit) {
         // 获取限流key
         String key = generateRateLimitKey(point, rateLimit);
-        // 使用Redisson的分布式限流器，并为限流器设置key
-        RRateLimiter rateLimiter = redissonClient.getRateLimiter(key);
-        // 设置限流器参数：每个时间窗口允许的请求数和时间窗口
-        // trySetRate 是 "不存在才设置" ,只有首次创建该 key 的限流器时会写入速率配置，后续调用直接跳过
-        rateLimiter.trySetRate(RateType.OVERALL, rateLimit.rate(), Duration.ofSeconds(rateLimit.rateInterval()),Duration.ofHours(1));
-        // 尝试获取令牌，如果获取失败则限流
-        if (!rateLimiter.tryAcquire(1)) {
-            throw new BusinessException(ErrorCode.TOO_MANY_REQUEST, rateLimit.message());
+        try {
+            // 使用Redisson的分布式限流器，并为限流器设置key
+            RRateLimiter rateLimiter = redissonClient.getRateLimiter(key);
+            // 设置限流器参数：每个时间窗口允许的请求数和时间窗口
+            // trySetRate 是 "不存在才设置" ,只有首次创建该 key 的限流器时会写入速率配置，后续调用直接跳过
+            rateLimiter.trySetRate(RateType.OVERALL, rateLimit.rate(), Duration.ofSeconds(rateLimit.rateInterval()), Duration.ofHours(1));
+            // 尝试获取令牌，如果获取失败则限流
+            if (!rateLimiter.tryAcquire(1)) {
+                throw new BusinessException(ErrorCode.TOO_MANY_REQUEST, rateLimit.message());
+            }
+        } catch (BusinessException e) {
+            // 真正命中限流，原样抛出
+            throw e;
+        } catch (Exception e) {
+            // fail-open：限流器自身不可用（Redis 抖动 / 连接拒绝）时放行，不要让限流组件拖垮业务。
+            // 登录接口依赖本切面，若此处抛异常会导致所有人无法登录——宁可不限流，也不能不可用。
+            log.error("限流器不可用，本次请求放行, key: {}", key, e);
         }
     }
 
@@ -98,22 +108,7 @@ public class RateLimitAspect {
 
     private String getClientIP() {
         ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-        if (attributes == null) {
-            return "unknown";
-        }
-        HttpServletRequest request = attributes.getRequest();
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("X-Real-IP");
-        }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getRemoteAddr();
-        }
-        // 处理多级代理的情况
-        if (ip != null && ip.contains(",")) {
-            ip = ip.split(",")[0].trim();
-        }
-        return ip != null ? ip : "unknown";
+        return IpUtils.getClientIp(attributes == null ? null : attributes.getRequest());
     }
 
 }

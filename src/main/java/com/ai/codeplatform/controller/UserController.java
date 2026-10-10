@@ -3,6 +3,7 @@ package com.ai.codeplatform.controller;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.ObjUtil;
+import cn.hutool.core.util.StrUtil;
 import com.ai.codeplatform.annotation.AuthCheck;
 import com.ai.codeplatform.common.BaseResponse;
 import com.ai.codeplatform.common.DeleteRequest;
@@ -14,14 +15,19 @@ import com.ai.codeplatform.manager.CosManager;
 import com.ai.codeplatform.model.dto.user.*;
 import com.ai.codeplatform.model.vo.LoginUserVO;
 import com.ai.codeplatform.model.vo.UserVO;
+import com.ai.codeplatform.ratelimiter.annotation.RateLimit;
+import com.ai.codeplatform.ratelimiter.enums.RateLimitType;
 import com.mybatisflex.core.paginate.Page;
 import com.wf.captcha.SpecCaptcha;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
 import com.ai.codeplatform.model.entity.User;
 import com.ai.codeplatform.service.UserService;
+import com.ai.codeplatform.service.email.EmailCodeService;
+import com.ai.codeplatform.utils.IpUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
@@ -35,6 +41,7 @@ import java.util.concurrent.TimeUnit;
  */
 @RestController
 @RequestMapping("/user")
+@Slf4j
 public class UserController {
 
     @Resource
@@ -45,6 +52,52 @@ public class UserController {
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
+
+    @Resource
+    private EmailCodeService emailCodeService;
+
+    /**
+     * 发送邮箱验证码（用于注册 / 找回密码 / 绑定邮箱 / 额度升级）
+     * 必须携带图形验证码：否则本接口会被当成免费发信炮台。
+     * @param request 发送请求
+     * @param httpServletRequest 用于取真实客户端 IP 做配额控制
+     * @return 是否发送成功
+     */
+    @PostMapping("/email/sendCode")
+    @RateLimit(limitType = RateLimitType.IP, rate = 10, rateInterval = 60, message = "验证码发送过于频繁，请稍后再试")
+    public BaseResponse<Boolean> sendEmailCode(@RequestBody EmailSendCodeRequest request,
+                                               HttpServletRequest httpServletRequest) {
+        if (request == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        String captchaKey = request.getCaptchaKey();
+        try {
+            if (StrUtil.isBlank(captchaKey)) {
+                throw new BusinessException(ErrorCode.CAPTCHA_ERROR, "请先获取图形验证码");
+            }
+            String cacheCode = stringRedisTemplate.opsForValue().get("captcha:" + captchaKey);
+            if (cacheCode == null || !cacheCode.equalsIgnoreCase(StrUtil.trim(request.getCaptchaCode()))) {
+                throw new BusinessException(ErrorCode.CAPTCHA_ERROR);
+            }
+            // 场景缺省为注册，兼容前端不传的情况
+            String scene = StrUtil.isBlank(request.getScene())
+                    ? EmailCodeService.SCENE_REGISTER : request.getScene();
+            // 先归一化 + 白名单校验，域名不支持时不必白白发一封邮件
+            String email = emailCodeService.validateAndNormalize(request.getEmail());
+            emailCodeService.sendCode(scene, email, IpUtils.getClientIp(httpServletRequest));
+            return ResultUtils.success(true);
+        } finally {
+            // 与登录验证码一致：一次性，无论成败都作废
+            if (StrUtil.isNotBlank(captchaKey)) {
+                try {
+                    stringRedisTemplate.delete("captcha:" + captchaKey);
+                } catch (Exception e) {
+                    log.warn("删除图形验证码失败（不影响业务）, captchaKey: {}", captchaKey, e);
+                }
+            }
+        }
+    }
+
     /**
      * 用户注册
      *
@@ -52,6 +105,7 @@ public class UserController {
      * @return 注册结果
      */
     @PostMapping("register")
+    @RateLimit(limitType = RateLimitType.IP, rate = 10, rateInterval = 60, message = "注册过于频繁，请稍后再试")
     public BaseResponse<Long> userRegister(@RequestBody UserRegisterRequest userRegisterRequest) {
         if (userRegisterRequest == null){
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
@@ -59,7 +113,9 @@ public class UserController {
         String userAccount = userRegisterRequest.getUserAccount();
         String userPassword = userRegisterRequest.getUserPassword();
         String checkPassword = userRegisterRequest.getCheckPassword();
-        long result = userService.userRegister(userAccount, userPassword, checkPassword);
+        String email = userRegisterRequest.getEmail();
+        String emailCode = userRegisterRequest.getEmailCode();
+        long result = userService.userRegister(userAccount, userPassword, checkPassword, email, emailCode);
         return ResultUtils.success(result);
     }
 
@@ -70,22 +126,35 @@ public class UserController {
      * @return 登录结果
      */
     @PostMapping("/login")
+    @RateLimit(limitType = RateLimitType.IP, rate = 10, rateInterval = 60, message = "登录尝试过于频繁，请稍后再试")
     public BaseResponse<LoginUserVO> userLogin(@RequestBody UserLoginRequest userLoginRequest, HttpServletRequest request) {
-        if (userLoginRequest == null || ObjUtil.hasEmpty(userLoginRequest)){
-            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        String captchaKey = null;
+        try {
+            if (userLoginRequest == null || ObjUtil.hasEmpty(userLoginRequest)){
+                throw new BusinessException(ErrorCode.PARAMS_ERROR);
+            }
+            // 获取验证码参数
+            captchaKey = userLoginRequest.getCaptchaKey();
+            String cacheCode = stringRedisTemplate.opsForValue().get("captcha:" + captchaKey);
+            String requestCaptchaCode = userLoginRequest.getCaptchaCode();
+            if (cacheCode == null || !cacheCode.equalsIgnoreCase(requestCaptchaCode)) {
+                // 用独立错误码，前端可按 code 判断（不再靠文案正则匹配）
+                throw new BusinessException(ErrorCode.CAPTCHA_ERROR);
+            }
+            String userAccount = userLoginRequest.getUserAccount();
+            String userPassword = userLoginRequest.getUserPassword();
+            LoginUserVO loginUserVO = userService.userLogin(userAccount, userPassword, request);
+            return ResultUtils.success(loginUserVO);
+        } finally {
+            // 验证码一次性：校验通过后无论登录成败都作废，避免同一个验证码在 5 分钟 TTL 内被用于密码爆破。
+            if (StrUtil.isNotBlank(captchaKey)) {
+                try {
+                    stringRedisTemplate.delete("captcha:" + captchaKey);
+                } catch (Exception e) {
+                    log.warn("删除验证码失败（不影响登录结果）, captchaKey: {}", captchaKey, e);
+                }
+            }
         }
-        // 获取验证码参数
-        String captchaKey = userLoginRequest.getCaptchaKey();
-        String cacheCode = stringRedisTemplate.opsForValue().get("captcha:" + captchaKey);
-        String requestCaptchaCode = userLoginRequest.getCaptchaCode();
-        if (cacheCode == null || !cacheCode.equalsIgnoreCase(requestCaptchaCode)) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "验证码错误或已过期");
-        }
-        String userAccount = userLoginRequest.getUserAccount();
-        String userPassword = userLoginRequest.getUserPassword();
-        LoginUserVO loginUserVO = userService.userLogin(userAccount, userPassword, request);
-        stringRedisTemplate.delete("captcha:" + captchaKey);
-        return ResultUtils.success(loginUserVO);
     }
 
     /**
@@ -198,7 +267,8 @@ public class UserController {
         if (user.getUserRole().equals(UserConstant.ADMIN_ROLE)) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "非法的删除请求！");
         }
-        boolean b = userService.removeById(deleteRequest.getId());
+        // 走 Service：逻辑删除前会改写 email，避免该邮箱永久占用唯一索引
+        boolean b = userService.deleteUserLogically(deleteRequest.getId());
         if (!b){
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "用户删除失败");
         }
