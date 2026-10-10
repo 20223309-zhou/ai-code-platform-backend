@@ -131,7 +131,9 @@ CREATE TABLE `sys_operation_log`  (
 DROP TABLE IF EXISTS `user`;
 CREATE TABLE `user`  (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT 'id',
-  `userAccount` varchar(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '账号',
+  `userAccount` varchar(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '账号（不允许包含 @，避免与邮箱登录撞号）',
+  `email` varchar(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '邮箱（小写归一化后存储）',
+  `emailVerified` tinyint NOT NULL DEFAULT 0 COMMENT '邮箱是否经本站验证：0否 1是',
   `githubId` bigint NULL DEFAULT NULL COMMENT 'GitHub ID',
   `userPassword` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '密码',
   `userName` varchar(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '用户昵称',
@@ -146,6 +148,7 @@ CREATE TABLE `user`  (
   `isDelete` tinyint NOT NULL DEFAULT 0 COMMENT '是否删除',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_userAccount`(`userAccount` ASC) USING BTREE,
+  UNIQUE INDEX `uk_user_email`(`email` ASC) USING BTREE,
   INDEX `idx_userName`(`userName` ASC) USING BTREE,
   INDEX `idx_user_githubId`(`githubId` ASC) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 417633215303593985 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '用户' ROW_FORMAT = Dynamic;
@@ -153,9 +156,12 @@ CREATE TABLE `user`  (
 -- ----------------------------
 -- Records of user
 -- ----------------------------
-INSERT INTO `user` VALUES (400410446946095104, 'admin', NULL, '734d2f66b73652996d2104ac306a33fe', '管理员', 'https://ai-code-platform-1324613570.cos.ap-chongqing.myqcloud.com/avatar/400410446946095104_SXNzApmwNlspu3rH.jpg', '你好', 'admin', 68, '2', '2026-04-11 11:09:09', '2026-04-11 11:09:09', '2026-05-29 11:40:39', 0);
-INSERT INTO `user` VALUES (403664180820008960, 'user', NULL, '734d2f66b73652996d2104ac306a33fe', '无名', NULL, NULL, 'user', 5, '0', '2026-04-20 10:38:18', '2026-04-20 10:38:18', '2026-05-20 10:37:46', 1);
-INSERT INTO `user` VALUES (412543169449906176, 'test', NULL, '734d2f66b73652996d2104ac306a33fe', '无名', NULL, NULL, 'user', 5, '0', '2026-05-14 22:40:16', '2026-05-14 22:40:16', '2026-05-20 10:37:48', 0);
-INSERT INTO `user` VALUES (417633215303593984, 'github_20223309-zhou', 250706118, '', 'Zhou Jiabao', 'https://avatars.githubusercontent.com/u/250706118?v=4', NULL, 'user', 5, '0', '2026-05-28 23:46:17', '2026-05-28 23:46:17', '2026-05-28 23:46:17', 0);
+-- 注意：下面的 INSERT 显式写出列名。
+-- 原来是 `INSERT INTO user VALUES (...)` 的位置传参，只要中间插入一个新列就会整体错位，
+-- 所以这里改成列名 + 值的写法，以后再加列也不会被影响。
+INSERT INTO `user` (`id`, `userAccount`, `email`, `emailVerified`, `githubId`, `userPassword`, `userName`, `userAvatar`, `userProfile`, `userRole`, `quota`, `vipLevel`, `editTime`, `createTime`, `updateTime`, `isDelete`) VALUES (400410446946095104, 'admin', NULL, 0, NULL, '734d2f66b73652996d2104ac306a33fe', '管理员', 'https://ai-code-platform-1324613570.cos.ap-chongqing.myqcloud.com/avatar/400410446946095104_SXNzApmwNlspu3rH.jpg', '你好', 'admin', 68, '2', '2026-04-11 11:09:09', '2026-04-11 11:09:09', '2026-05-29 11:40:39', 0);
+INSERT INTO `user` (`id`, `userAccount`, `email`, `emailVerified`, `githubId`, `userPassword`, `userName`, `userAvatar`, `userProfile`, `userRole`, `quota`, `vipLevel`, `editTime`, `createTime`, `updateTime`, `isDelete`) VALUES (403664180820008960, 'user', NULL, 0, NULL, '734d2f66b73652996d2104ac306a33fe', '无名', NULL, NULL, 'user', 5, '0', '2026-04-20 10:38:18', '2026-04-20 10:38:18', '2026-05-20 10:37:46', 1);
+INSERT INTO `user` (`id`, `userAccount`, `email`, `emailVerified`, `githubId`, `userPassword`, `userName`, `userAvatar`, `userProfile`, `userRole`, `quota`, `vipLevel`, `editTime`, `createTime`, `updateTime`, `isDelete`) VALUES (412543169449906176, 'test', NULL, 0, NULL, '734d2f66b73652996d2104ac306a33fe', '无名', NULL, NULL, 'user', 5, '0', '2026-05-14 22:40:16', '2026-05-14 22:40:16', '2026-05-20 10:37:48', 0);
+INSERT INTO `user` (`id`, `userAccount`, `email`, `emailVerified`, `githubId`, `userPassword`, `userName`, `userAvatar`, `userProfile`, `userRole`, `quota`, `vipLevel`, `editTime`, `createTime`, `updateTime`, `isDelete`) VALUES (417633215303593984, 'github_20223309-zhou', NULL, 0, 250706118, '', 'Zhou Jiabao', 'https://avatars.githubusercontent.com/u/250706118?v=4', NULL, 'user', 5, '0', '2026-05-28 23:46:17', '2026-05-28 23:46:17', '2026-05-28 23:46:17', 0);
 
 SET FOREIGN_KEY_CHECKS = 1;

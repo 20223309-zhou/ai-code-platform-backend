@@ -351,12 +351,12 @@ npm run build-only
 
 - 登录页：账号密码 + 验证码登录
 
-![image-20261005171047446](assets/image-20261005171047446.png)
+![img.png](img.png)
 
 
 - 注册页：用户注册
 
-![image-20261005171113996](assets/image-20261005171113996.png)
+![img_1.png](img_1.png)
 
 - 个人中心：查看与修改个人资料
 
