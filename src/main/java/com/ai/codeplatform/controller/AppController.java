@@ -14,6 +14,7 @@ import com.ai.codeplatform.constant.UserConstant;
 import com.ai.codeplatform.exception.BusinessException;
 import com.ai.codeplatform.exception.ErrorCode;
 import com.ai.codeplatform.manager.CancelGenerationManager;
+import com.ai.codeplatform.manager.CosManager;
 import com.ai.codeplatform.model.dto.app.*;
 import com.ai.codeplatform.model.entity.User;
 import com.ai.codeplatform.model.enums.ModelEnum;
@@ -66,6 +67,9 @@ public class AppController {
 
     @Resource
     private CancelGenerationManager cancelGenerationManager;
+
+    @Resource
+    private CosManager cosManager;
 
     /**
      * 下载应用代码
@@ -304,8 +308,8 @@ public class AppController {
         if (!result) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "删除应用失败");
         }
-        // 异步删除应用目录和部署目录
-        Thread.ofVirtual().start(() -> deleteOutputDirAndDeployDir(oldApp));
+        // 异步清理应用占用的资源（本地目录、部署目录、COS 封面）
+        Thread.ofVirtual().start(() -> cleanupAppResources(oldApp));
         return ResultUtils.success(result);
     }
 
@@ -418,8 +422,8 @@ public class AppController {
         if (!result) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "应用删除失败");
         }
-        // 异步删除应用目录和部署目录
-        Thread.ofVirtual().start(() -> deleteOutputDirAndDeployDir(oldApp));
+        // 异步清理应用占用的资源（本地目录、部署目录、COS 封面）
+        Thread.ofVirtual().start(() -> cleanupAppResources(oldApp));
         return ResultUtils.success(result);
     }
 
@@ -537,9 +541,13 @@ public class AppController {
         return ResultUtils.success(deployUrl);
     }
 
-    // 删除应用输出目录和部署目录
-    private void deleteOutputDirAndDeployDir(App app) {
-        // 删除本地应用目录
+    /**
+     * 清理应用占用的外部资源：本地输出目录、部署目录、COS 上的封面截图。
+     *
+     * @param app 删除前的应用快照（删完库之后 codeGenType / deployKey 就拿不到了）
+     */
+    private void cleanupAppResources(App app) {
+        // 1. 删除本地应用目录
         String dirName = app.getCodeGenType() + "_" + app.getId();
         String outputDir = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + dirName;
         boolean exist = FileUtil.exist(new File(outputDir));
@@ -553,7 +561,7 @@ public class AppController {
                 log.info("删除应用输出目录成功，应用目录：{}", outputDir);
             }
         }
-        // 删除部署目录
+        // 2. 删除部署目录
         if (app.getDeployKey() == null) {
             log.info("应用未部署，不存在部署密钥,不需要删除部署目录");
         } else {
@@ -569,6 +577,15 @@ public class AppController {
                     log.info("删除应用部署文件成功，部署目录：{}", deployDir);
                 }
             }
+        }
+        // 3. 删除 COS 上的应用封面截图。
+        String cover = app.getCover();
+        if (StrUtil.isBlank(cover)) {
+            log.info("应用无封面，跳过 COS 清理，应用ID：{}", app.getId());
+        } else if (cosManager.deleteObjectByUrl(cover)) {
+            log.info("删除应用封面成功，应用ID：{}，封面：{}", app.getId(), cover);
+        } else {
+            log.warn("删除应用封面失败，应用ID：{}，封面：{}", app.getId(), cover);
         }
     }
 

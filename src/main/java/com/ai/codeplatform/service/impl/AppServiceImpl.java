@@ -28,14 +28,14 @@ import com.ai.codeplatform.model.vo.AppVO;
 import com.ai.codeplatform.model.vo.UserVO;
 import com.ai.codeplatform.rag.QdrantDocumentLoader;
 import com.ai.codeplatform.service.*;
+import com.ai.codeplatform.utils.SpringContextUtil;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import com.ai.codeplatform.model.entity.App;
 import com.ai.codeplatform.mapper.AppMapper;
-import dev.langchain4j.data.message.Content;
-import dev.langchain4j.data.message.ImageContent;
-import dev.langchain4j.data.message.TextContent;
-import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.data.message.*;
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -120,8 +120,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         App app = new App();
         BeanUtil.copyProperties(appAddRequest, app);
         app.setUserId(loginUser.getId());
-        // 应用名称暂时为 initPrompt 前 12 位
-        app.setAppName(initPrompt.substring(0, Math.min(initPrompt.length(), 12)));
+        app.setAppName(generateAppName(initPrompt));
         // 代码生成类型：用户显式指定具体类型时直接使用（创建后不可更改）；
         // 未指定或选择“智能选择(auto)”时，由 AI 根据 initPrompt 路由（保持原有默认行为）。
         AiCodeGenTypeRoutingService routingService = aiCodeGenTypeRoutingServiceFactory.createAiCodeGenTypeRoutingService();
@@ -182,6 +181,30 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         }
         log.info("应用创建成功，ID: {}, 类型: {}", app.getId(), selectedCodeGenType.getValue());
         return app;
+    }
+
+    /**
+     * 使用AI生成应用名
+     * @param initPrompt
+     * @return
+     */
+    private String generateAppName(String initPrompt) {
+        if (StrUtil.isBlank(initPrompt)) {
+            return "新应用";
+        }
+        ChatModel chatModel = SpringContextUtil.getBean("routingChatModelPrototype", ChatModel.class);
+        List<ChatMessage> messages = List.of(new SystemMessage("你是一个应用名称生成器，用户会给你一个应用的初始提示词，你需要根据这个提示词生成一个简短、易记、与提示词相关的应用名称。" +
+                "请确保名称不超过 10 个字符，并且去除换行和特殊字符。只输出应用名称，不要输出任何其他内容"),new UserMessage(initPrompt));
+        ChatResponse chatResponse = chatModel.chat(messages);
+        String appName = chatResponse.aiMessage().text();
+        if(StrUtil.isNotBlank(appName)){
+            return appName;
+        }
+        // 截取前 10 个字符作为应用名
+        String name = initPrompt.length() > 10 ? initPrompt.substring(0, 10) : initPrompt;
+        // 去除换行和特殊字符
+        name = name.replaceAll("[\\r\\n]", "").replaceAll("[^\\w\\s]", "");
+        return name;
     }
 
     /**

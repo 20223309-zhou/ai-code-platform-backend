@@ -2,6 +2,7 @@ package com.ai.codeplatform.manager;
 
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.RandomUtil;
+import cn.hutool.core.util.StrUtil;
 import com.ai.codeplatform.config.CosClientConfig;
 import com.ai.codeplatform.exception.BusinessException;
 import com.ai.codeplatform.exception.ErrorCode;
@@ -63,6 +64,47 @@ public class CosManager {
             log.error("文件上传COS失败，返回结果为空");
             return null;
         }
+    }
+
+    /**
+     * 删除 COS 对象
+     * <p>
+     * 异常在这里就收敛掉（记录日志 + 返回 false），不向上抛：
+     * COS 的删除是幂等的，对象不存在也算成功，没必要让清理动作把业务主流程带崩。
+     *
+     * @param key COS 对象键
+     * @return 是否删除成功
+     */
+    public boolean deleteObject(String key) {
+        if (StrUtil.isBlank(key)) {
+            return false;
+        }
+        try {
+            cosClient.deleteObject(cosClientConfig.getBucket(), key);
+            log.info("COS 对象删除成功: {}", key);
+            return true;
+        } catch (Exception e) {
+            log.error("COS 对象删除失败: {}", key, e);
+            return false;
+        }
+    }
+
+    /**
+     * 按访问 URL 删除 COS 对象
+     * @param url 上传时返回的访问 URL
+     * @return 是否删除成功
+     */
+    public boolean deleteObjectByUrl(String url) {
+        String host = cosClientConfig.getHost();
+        if (StrUtil.isBlank(url) || StrUtil.isBlank(host) || !url.startsWith(host)) {
+            log.warn("跳过非本站 COS 地址的删除: {}", url);
+            return false;
+        }
+        String key = url.substring(host.length());
+        if (StrUtil.isBlank(key)) {
+            return false;
+        }
+        return deleteObject(key);
     }
 
     /**
