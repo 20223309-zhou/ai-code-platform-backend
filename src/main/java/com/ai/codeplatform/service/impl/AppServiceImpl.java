@@ -132,7 +132,13 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
             selectedCodeGenType = specified;
         } else {
             // 智能选择 / 未指定 / 非法值：由 AI 路由，并做兜底
-            selectedCodeGenType = routingService.routeCodeGenType(initPrompt);
+            // 路由同样走 qwen 模型，与取名共用配额；限流/超时时必须降级，否则创建流程直接失败
+            try {
+                selectedCodeGenType = routingService.routeCodeGenType(initPrompt);
+            } catch (Exception e) {
+                log.warn("AI 路由生成类型失败，降级为 MULTI_FILE。原因: {}", e.toString());
+                selectedCodeGenType = CodeGenTypeEnum.MULTI_FILE;
+            }
             if (selectedCodeGenType == CodeGenTypeEnum.WARNING || selectedCodeGenType == null) {
                 selectedCodeGenType = CodeGenTypeEnum.MULTI_FILE;
             }
@@ -179,19 +185,23 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         if (StrUtil.isBlank(initPrompt)) {
             return "新应用";
         }
-        ChatModel chatModel = SpringContextUtil.getBean("routingChatModelPrototype", ChatModel.class);
-        List<ChatMessage> messages = List.of(new SystemMessage("你是一个应用名称生成器，用户会给你一个应用的初始提示词，你需要根据这个提示词生成一个简短、易记、与提示词相关的应用名称。" +
-                "请确保名称不超过 10 个字符，并且去除换行和特殊字符。只输出应用名称，不要输出任何其他内容"),new UserMessage(initPrompt));
-        ChatResponse chatResponse = chatModel.chat(messages);
-        String appName = chatResponse.aiMessage().text();
-        if(StrUtil.isNotBlank(appName)){
-            return appName;
+        try {
+            ChatModel chatModel = SpringContextUtil.getBean("routingChatModelPrototype", ChatModel.class);
+            List<ChatMessage> messages = List.of(new SystemMessage("你是一个应用名称生成器，用户会给你一个应用的初始提示词，你需要根据这个提示词生成一个简短、易记、与提示词相关的应用名称。" +
+                    "请确保名称不超过 10 个字符，并且去除换行和特殊字符。只输出应用名称，不要输出任何其他内容"),new UserMessage(initPrompt));
+            ChatResponse chatResponse = chatModel.chat(messages);
+            String appName = chatResponse.aiMessage().text();
+            if (StrUtil.isNotBlank(appName)) {
+                return appName;
+            }
+        } catch (Exception e) {
+            // AI 取名只是"更好的默认值"（用户可在应用编辑页改名），不能因为一次模型限流/超时
+            // 就让整个创建流程失败。失败一律降级为本地截取。
+            log.warn("AI 生成应用名失败，降级为本地截取。原因: {}", e.toString());
         }
-        // 截取前 10 个字符作为应用名
+        // 本地兜底：截取前 10 个字符，去除换行和特殊字符
         String name = initPrompt.length() > 10 ? initPrompt.substring(0, 10) : initPrompt;
-        // 去除换行和特殊字符
-        name = name.replaceAll("[\\r\\n]", "").replaceAll("[^\\w\\s]", "");
-        return name;
+        return name.replaceAll("[\\r\\n]", "").replaceAll("[^\\w\\s]", "");
     }
 
     /**
