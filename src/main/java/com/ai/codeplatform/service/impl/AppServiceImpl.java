@@ -138,42 +138,29 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
             }
         }
         app.setCodeGenType(selectedCodeGenType.getValue());
-        // 使用 CAS 方式扣减额度（最多重试 3 次）
-        int maxRetry = 3;
-        boolean success = false;
-        for (int i = 0; i < maxRetry; i++) {
-            // 重新查询最新的用户信息
-            User currentUser = userService.getById(loginUser.getId());
-            if (currentUser == null) {
-                throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "用户不存在");
-            }
-
-            int currentQuota = currentUser.getQuota();
-            // 检查额度是否充足
-            if (currentQuota <= 0) {
-                throw new BusinessException(ErrorCode.OPERATION_ERROR, "额度不足，请充值后再试");
-            }
-
-            // CAS 扣减额度
-            // update user set quota = quota - 1 where id = ? and quota = ?
-            success = userService.updateChain()
-                    .set(User::getQuota, currentQuota - 1)
-                    .set(User::getUpdateTime, LocalDateTime.now())
-                    .where(User::getId).eq(loginUser.getId())
-                    .and(User::getQuota).eq(currentQuota)
-                    .update();
-
-            if (success) {
-                log.info("用户 {} 额度扣减成功，原额度: {}, 新额度: {}", currentUser.getId(), currentQuota, currentQuota - 1);
-                break;
-            } else {
-                log.warn("用户 {} 额度扣减失败（并发冲突），第 {} 次重试", currentUser.getId(), i + 1);
-            }
+        // 前置校验：让额度不足的用户在插库前就拿到明确提示（此处读到的值只用于判断与日志，不参与扣减条件）
+        User quotaUser = userService.getById(loginUser.getId());
+        if (quotaUser == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "用户不存在");
+        }
+        int quotaBefore = quotaUser.getQuota();
+        if (quotaBefore <= 0) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "额度不足，请充值后再试");
         }
 
-        if (!success) {
-            throw new BusinessException(ErrorCode.OPERATION_ERROR, "系统繁忙，请稍后重试");
+        // 并发请求会在该行的排他锁上排队等待，锁释放后重新判断条件，不会失败，故无需重试。
+        // update user set quota = quota - 1, updateTime = ? where id = ? and quota > 0
+        boolean deducted = userService.updateChain()
+                .setRaw(User::getQuota, "quota - 1")
+                .set(User::getUpdateTime, LocalDateTime.now())
+                .where(User::getId).eq(loginUser.getId())
+                .and(User::getQuota).gt(0)
+                .update();
+        if (!deducted) {
+            // 影响行数为 0：并发下额度刚被其他请求扣完（前置校验通过、扣减时已不足）
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "额度不足，请充值后再试");
         }
+        log.info("用户 {} 额度扣减成功，扣减前读到余额: {}", loginUser.getId(), quotaBefore);
         // 插入数据库
         boolean result = save(app);
         if (!result) {

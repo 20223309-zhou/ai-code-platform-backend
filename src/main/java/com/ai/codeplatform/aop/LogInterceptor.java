@@ -171,6 +171,14 @@ public class LogInterceptor {
      * @param logInfo 日志信息
      */
     private void saveLog(SysOperationLog logInfo) {
+        // operation 列是 varchar(80)。异常 message 可能远超此长度（如 Redis 连接异常会带上
+        // Netty pending tasks / 完整命令参数，动辄上千字符），一旦超长会导致**整条日志**写入失败，
+        // 把真实异常也一起掩盖掉（只剩一条无意义的 Data too long）。故入库前强制截断。
+        final int operationMaxLength = 80;
+        String operation = logInfo.getOperation();
+        if (operation != null && operation.length() > operationMaxLength) {
+            logInfo.setOperation(operation.substring(0, operationMaxLength));
+        }
         // 异步保存日志 —— 虚拟线程
         Thread.startVirtualThread(() -> {
             try {
