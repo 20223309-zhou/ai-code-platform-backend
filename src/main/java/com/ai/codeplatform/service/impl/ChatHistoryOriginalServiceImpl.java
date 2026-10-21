@@ -17,6 +17,7 @@ import com.ai.codeplatform.mapper.ChatHistoryOriginalMapper;
 import com.ai.codeplatform.service.ChatHistoryOriginalService;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.Content;
 import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.TextContent;
@@ -193,7 +194,7 @@ public class ChatHistoryOriginalServiceImpl extends ServiceImpl<ChatHistoryOrigi
             //    注意：clear() 内部会走 chatMemoryStore.deleteAll(appId)，把 Redis 里该应用的记忆清空
             chatMemory.clear();
 
-            // 3. 遍历原始历史记录，根据类型将消息添加到记忆中
+            // 3. 转换消息并一次性灌入记忆（内部只写一次 Redis，不是逐条写）
             int loadedCount = loadMessagesToMemory(originalHistoryList, chatMemory);
 
             log.info("成功为 appId: {} 加载 {} 条历史对话（估算 {} tokens）",
@@ -471,8 +472,19 @@ public class ChatHistoryOriginalServiceImpl extends ServiceImpl<ChatHistoryOrigi
      * @return 加载的记录数
      */
     private int loadMessagesToMemory(List<ChatHistoryOriginal> originalHistoryList, MessageWindowChatMemory chatMemory) {
+        if (CollUtil.isEmpty(originalHistoryList)) {
+            return 0;
+        }
+        // 先把整段历史攒成列表，最后用 set() 一次灌入。
+        //
+        // 为什么不能逐条 add：MessageWindowChatMemory 是无状态的，add() 的实现是
+        // 「store.getMessages 读全量 → 追加 → store.updateMessages 全量写回」。
+        // 36 条历史逐条 add = 36 次 GET + 36 次 SETEX，且 payload 逐次递增（最后一次约 300KB），
+        // 实测总流量在 10MB 级 —— 这是冷启动最容易撞 Redis 读超时的原因。
+        // set() 只调一次 updateMessages（0 次 GET、1 次写），窗口裁剪仍由记忆内部完成。
+        List<ChatMessage> buffer = new ArrayList<>(originalHistoryList.size());
         int loadedCount = 0;
-        // 遍历原始历史记录，根据类型将消息添加到记忆中
+        // 遍历原始历史记录，根据类型将消息转换后放入缓冲区
         for (ChatHistoryOriginal history : originalHistoryList) {
             // 这里需要根据消息类型进行转换，支持 AI, user, toolExecutionRequest, toolExecutionResult 4种类型
             String messageType = history.getMessageType();
@@ -483,14 +495,14 @@ public class ChatHistoryOriginalServiceImpl extends ServiceImpl<ChatHistoryOrigi
                     // 否则图片会退化成一串 JSON 文本，模型看不到图
                     List<Content> contents = deserializeContents(history.getMessage());
                     if (contents.isEmpty()) {
-                        chatMemory.add(UserMessage.from(history.getMessage()));
+                        buffer.add(UserMessage.from(history.getMessage()));
                     } else {
-                        chatMemory.add(UserMessage.from(contents));
+                        buffer.add(UserMessage.from(contents));
                     }
                     loadedCount++;
                 }
                 case AI -> {
-                    chatMemory.add(AiMessage.from(history.getMessage()));
+                    buffer.add(AiMessage.from(history.getMessage()));
                     loadedCount++;
                 }
                 case TOOL_EXECUTION_REQUEST -> {
@@ -502,9 +514,9 @@ public class ChatHistoryOriginalServiceImpl extends ServiceImpl<ChatHistoryOrigi
                             .build();
                     // 有些工具调用请求带有文本，有些没有
                     if (toolRequestMessage.getText().isEmpty()) {
-                        chatMemory.add(AiMessage.from(List.of(toolExecutionRequest)));
+                        buffer.add(AiMessage.from(List.of(toolExecutionRequest)));
                     } else {
-                        chatMemory.add(AiMessage.from(toolRequestMessage.getText(), List.of(toolExecutionRequest)));
+                        buffer.add(AiMessage.from(toolRequestMessage.getText(), List.of(toolExecutionRequest)));
                     }
                     loadedCount++;
                 }
@@ -513,11 +525,14 @@ public class ChatHistoryOriginalServiceImpl extends ServiceImpl<ChatHistoryOrigi
                     String id = toolExecutedMessage.getId();
                     String toolName = toolExecutedMessage.getName();
                     String toolExecutionResult = toolExecutedMessage.getResult();
-                    chatMemory.add(ToolExecutionResultMessage.from(id, toolName, toolExecutionResult));
+                    buffer.add(ToolExecutionResultMessage.from(id, toolName, toolExecutionResult));
                     loadedCount++;
                 }
                 case null -> log.error("未知消息类型: {}", messageType);
             }
+        }
+        if (!buffer.isEmpty()) {
+            chatMemory.set(buffer);
         }
         return loadedCount;
     }

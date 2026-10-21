@@ -10,7 +10,6 @@ import com.ai.codeplatform.service.ChatHistoryOriginalService;
 import com.ai.codeplatform.utils.SpringContextUtil;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import dev.langchain4j.community.store.memory.chat.redis.RedisChatMemoryStore;
 import dev.langchain4j.data.message.Content;
 import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
@@ -21,6 +20,7 @@ import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.rag.RetrievalAugmentor;
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.skills.Skills;
+import dev.langchain4j.store.memory.chat.ChatMemoryStore;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
@@ -41,8 +41,12 @@ public class AiCodeGeneratorServiceFactory {
      */
     private static final int MAX_MEMORY_MESSAGES = 200;
 
+    /**
+     * 注接口而非具体类：实际 Bean 是 CompressingChatMemoryStore（压缩 + 写入容错），
+     * 内部委托 RedisChatMemoryStore。
+     */
     @Resource
-    private RedisChatMemoryStore redisChatMemoryStore;
+    private ChatMemoryStore chatMemoryStore;
 
     @Resource
     private ChatHistoryOriginalService chatHistoryOriginalService;
@@ -194,7 +198,7 @@ public class AiCodeGeneratorServiceFactory {
             MessageWindowChatMemory chatMemory = MessageWindowChatMemory
                     .builder()
                     .id(appId)
-                    .chatMemoryStore(redisChatMemoryStore)
+                    .chatMemoryStore(chatMemoryStore)
                     .maxMessages(MAX_MEMORY_MESSAGES)
                     .build();
             // 从数据库加载历史对话到记忆中（按 token 预算回放，保证语义主线不丢）
