@@ -4,6 +4,8 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
+import com.ai.codeplatform.ai.AppPlanService;
+import com.ai.codeplatform.ai.model.plan.PlanListResult;
 import com.ai.codeplatform.annotation.AuthCheck;
 import com.ai.codeplatform.annotation.LogRecord;
 import com.ai.codeplatform.common.BaseResponse;
@@ -40,10 +42,12 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.io.File;
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 应用 控制层。
@@ -55,6 +59,9 @@ import java.util.Map;
 @RequestMapping("/app")
 public class AppController {
     private static final ThreadLocal<Boolean> threadLocal = new ThreadLocal<>();
+
+    /** 换方案时最多带几个"已看过"的方案标题给模型，太多会挤占 prompt 且容易让它混乱 */
+    private static final int MAX_EXCLUDE_TITLES = 8;
 
     @Resource
     private AppService appService;
@@ -70,6 +77,9 @@ public class AppController {
 
     @Resource
     private CosManager cosManager;
+
+    @Resource
+    private AppPlanService appPlanService;
 
     /**
      * 下载应用代码
@@ -134,6 +144,127 @@ public class AppController {
         }
         App app = appService.createApp(appAddRequest, request, initPrompt);
         return ResultUtils.success(app.getId());
+    }
+
+    /**
+     * 生成设计方案（创建应用前的方案预选）。
+     * 与 {@link #addApp} 刻意分离：这一步只产出方案，**不创建应用、不扣额度、不写任何文件**。
+     * 前端拿到方案后让用户选择或自定义，选择结果拼进 prompt，再走 /add + /chat/gen/code。
+     * 这样做的原因：把「方案确认」做成两个独立的 HTTP 请求，状态天然无状态，
+     * 用户关掉页面再回来也不会卡在半截的 SSE 连接上。
+     *
+     * @param appPlanRequest 应用描述
+     * @return 方案列表
+     */
+    @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
+    @RateLimit(limitType = RateLimitType.USER, rate = 20, rateInterval = 60, message = "方案生成过于频繁，请稍后再试")
+    @PostMapping("/chat/plan")
+    public BaseResponse<PlanListResult> generateAppPlan(@RequestBody AppPlanRequest appPlanRequest) {
+        if (appPlanRequest == null || StrUtil.isBlank(appPlanRequest.getInitPrompt())) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "应用描述不能为空");
+        }
+        PlanListResult result;
+        try {
+            result = appPlanService.generatePlans(buildPlanPrompt(appPlanRequest));
+        } catch (Exception e) {
+            // 方案预选是增强能力，失败不能让用户卡住：返回空方案，前端会直接进入生成流程
+            log.warn("方案生成失败，降级为直接生成。prompt: {}, 原因: {}",
+                    StrUtil.maxLength(appPlanRequest.getInitPrompt(), 100), e.toString());
+            return ResultUtils.success(new PlanListResult());
+        }
+        if (result == null || result.getPlans() == null || result.getPlans().isEmpty()) {
+            return ResultUtils.success(new PlanListResult());
+        }
+        // 需求已明确、或压根不是前端需求时，只保留一个方案，避免出现"伪选择"
+        boolean skipChoice = Boolean.TRUE.equals(result.getRecommendSkip())
+                || Boolean.TRUE.equals(result.getIrrelevant());
+        if (skipChoice && result.getPlans().size() > 1) {
+            result.setPlans(result.getPlans().subList(0, 1));
+        }
+        return ResultUtils.success(result);
+    }
+
+    /**
+     * 把「已看过的方案」拼进给模型的用户消息。
+     * <p>
+     * 不做成 {@code AppPlanService} 的第二个参数，是因为 langchain4j 对参数 ≥ 2 的方法
+     * 要求每个参数都带 {@code @UserMessage/@V/@MemoryId} 之类注解，为一个纯文本约束
+     * 去改接口签名并不划算。
+     */
+    private String buildPlanPrompt(AppPlanRequest appPlanRequest) {
+        String prompt = appPlanRequest.getInitPrompt().trim();
+        List<String> excludeTitles = appPlanRequest.getExcludeTitles();
+        if (excludeTitles == null || excludeTitles.isEmpty()) {
+            return prompt;
+        }
+        String joined = excludeTitles.stream()
+                .filter(StrUtil::isNotBlank)
+                .map(String::trim)
+                .distinct()
+                .limit(MAX_EXCLUDE_TITLES)
+                .collect(Collectors.joining("、"));
+        if (StrUtil.isBlank(joined)) {
+            return prompt;
+        }
+        return prompt + "\n\n【本次需避开的方向】\n" + joined
+                + "\n以上方向用户已经看过或已经采用过，请给出布局结构与交互模式明显不同的新方案。";
+    }
+
+    /**
+     * 换方案：清空当前应用的生成产物，让下一轮从零开始。
+     * <p>
+     * 只删 {@code code_output} 下的工作目录，<b>不动 code_deploy</b> —— 已部署的线上版本
+     * 删掉就是站点直接 404，而用户只是想换个方向重做，并没打算把应用下线。
+     * <p>
+     * 目录名由 {@code codeGenType + "_" + appId} 派生，不接受客户端传路径；
+     * 另外再做一次 canonicalPath 校验，防止拼接结果意外越出工作区。
+     */
+    @AuthCheck(mustRole = UserConstant.DEFAULT_ROLE)
+    @RateLimit(limitType = RateLimitType.USER, rate = 10, rateInterval = 60, message = "操作过于频繁，请稍后再试")
+    @PostMapping("/chat/restart/{appId}")
+    public BaseResponse<Boolean> restartGeneration(@PathVariable Long appId, HttpServletRequest request) {
+        // 1. 校验应用存在且属于当前用户
+        App app = appService.getById(appId);
+        if (app == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        }
+        User loginUser = userService.getLoginUser(request);
+        if (!app.getUserId().equals(loginUser.getId())) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
+        }
+
+        // 2. 清掉这个应用的所有生成目录
+        //    不按 codeGenType 拼路径：用户可能切换过生成类型（html / multi_file / vue_project），
+        //    只清当前类型会留下旧产物，新方案写文件时又撞上旧文件。
+        //    目录名固定为 "{类型}_{appId}"，所以按最后一个下划线之后的部分精确匹配 appId。
+        File outputRoot = new File(AppConstant.CODE_OUTPUT_ROOT_DIR);
+        File[] appDirs = outputRoot.listFiles(File::isDirectory);
+        String appIdSuffix = String.valueOf(appId);
+        int deleted = 0;
+        if (appDirs != null) {
+            for (File dir : appDirs) {
+                int separator = dir.getName().lastIndexOf('_');
+                if (separator < 0 || !dir.getName().substring(separator + 1).equals(appIdSuffix)) {
+                    continue;
+                }
+                // 双保险：确认目标确实落在工作区之内
+                try {
+                    String rootPath = outputRoot.getCanonicalPath() + File.separator;
+                    if (!dir.getCanonicalPath().startsWith(rootPath)) {
+                        continue;
+                    }
+                } catch (IOException e) {
+                    log.warn("换方案：跳过目录校验失败的路径 {}", dir, e);
+                    continue;
+                }
+                if (!FileUtil.del(dir)) {
+                    throw new BusinessException(ErrorCode.SYSTEM_ERROR, "清理生成目录失败，请稍后重试");
+                }
+                deleted++;
+            }
+        }
+        log.info("换方案：已清空应用 {} 的生成目录，共 {} 个", appId, deleted);
+        return ResultUtils.success(true);
     }
 
     /**

@@ -7,6 +7,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -91,7 +92,12 @@ public class VueProjectBuilder {
             log.info("node_modules 已存在，跳过 npm install（如构建报缺少依赖，调用方可自动重装重试）");
         }
         // 执行 npm run build
-        BuildResult buildResult = executeCommand(projectDir, buildCommand("npm") + " run build", 180, "npm run build");
+        // 🔴 强制 --base=./ ：产物必须用相对路径引用 assets。
+        // 预览走 /api/static/{dir}/dist/index.html，是子路径访问；
+        // 若 index.html 写成绝对路径 /assets/xxx.css，浏览器会去站点根取 → 404（页面空白）。
+        // 提示词里虽要求 base: './'，但 AI 生成存在不遵守的情况，所以命令行强制覆盖，优先级高于 vite.config.js。
+        BuildResult buildResult = executeCommand(projectDir,
+                buildCommand("npm") + " run build -- --base=./", 180, "npm run build");
         if (!buildResult.success()) {
             return BuildResult.fail("构建失败（npm run build）。错误日志：\n" + tail(buildResult.message()));
         }
@@ -101,7 +107,35 @@ public class VueProjectBuilder {
             return BuildResult.fail("构建命令执行成功但 dist 目录未生成: " + distDir.getAbsolutePath());
         }
         log.info("Vue 项目构建成功，dist 目录: {}", distDir.getAbsolutePath());
+        normalizeAssetBase(distDir);
         return BuildResult.ok("构建成功，产物目录: dist/");
+    }
+
+    /**
+     * 兜底修正 dist/index.html 里的资源引用路径。
+     * <p>
+     * 预览地址是 {@code /api/static/{dir}/dist/index.html}，属于子路径访问。
+     * 只要 index.html 里写的是绝对路径 {@code /assets/x.css}，浏览器就会去站点根取，
+     * 结果 404 + 预览空白。{@code --base=./} 已能覆盖绝大多数情况，
+     * 但 AI 生成的 package.json 的 build 脚本千奇百怪（有的是 {@code vue-tsc -b && vite build}），
+     * 参数可能被吞掉，所以这里再做一次幂等修正（已经是 ./assets/ 时不会改动）。
+     */
+    private void normalizeAssetBase(File distDir) {
+        File indexHtml = new File(distDir, "index.html");
+        if (!indexHtml.exists()) {
+            return;
+        }
+        try {
+            String html = Files.readString(indexHtml.toPath());
+            String fixed = html.replaceAll("(src|href)=\"/assets/", "$1=\"./assets/");
+            if (!fixed.equals(html)) {
+                Files.writeString(indexHtml.toPath(), fixed);
+                log.warn("构建产物用绝对路径引用 assets，已修正为相对路径（否则子路径预览会 404）: {}",
+                        indexHtml.getAbsolutePath());
+            }
+        } catch (Exception e) {
+            log.warn("修正 dist/index.html 资源路径失败（不影响构建结果）: {}", e.getMessage());
+        }
     }
 
     /**

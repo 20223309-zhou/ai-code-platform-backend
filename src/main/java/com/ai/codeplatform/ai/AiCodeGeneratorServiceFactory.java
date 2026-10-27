@@ -23,6 +23,7 @@ import dev.langchain4j.skills.Skills;
 import dev.langchain4j.store.memory.chat.ChatMemoryStore;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -107,7 +108,6 @@ public class AiCodeGeneratorServiceFactory {
 
     /**
      * 在调用 AI 服务前，把用户消息中的图片注入到该 appId 的记忆中。
-     * <p>
      * 由于 langchain4j 的 {@code @UserMessage UserMessage} 参数会被序列化为对象的 toString()，
      * 导致多模态内容（图片）丢失，因此图片改为通过记忆（ChatMemory）传入，
      * 文本仍通过 {@code @UserMessage String} 参数传入。
@@ -247,6 +247,28 @@ public class AiCodeGeneratorServiceFactory {
     @Bean
     public AiCodeGeneratorService aiCodeGeneratorService() {
         return getAiCodeGeneratorService(0L);
+    }
+
+    /**
+     * 方案预选服务（创建应用前给用户挑设计方案）。
+     * <p>
+     * 刻意用单例 + routing 模型 + 零装配（无 tools / 无 ChatMemory / 无 RAG）：
+     * <ul>
+     *   <li>方案阶段不能产生副作用，挂 tool 会让模型直接开始写文件</li>
+     *   <li>不需要隔离并发 —— 一次调用只出几百 token，耗时 1~2 秒，频率极低</li>
+     *   <li>必须是单例：每个 ChatModel 实例内部都会建一套线程池（非守护线程），
+     *       每次请求 new 一个会持续泄漏线程</li>
+     * </ul>
+     * ⚠️ ChatModel 用**方法参数注入**而不是 {@code SpringContextUtil.getBean}：
+     * 后者靠 ApplicationContextAware 写静态字段，Bean 创建顺序不保证，
+     * 在本类初始化早期调用会拿到 null 并 NPE。参数注入由 Spring 解析依赖图，顺序天然正确。
+     * prototype 的 Bean 在注入时创建一次，之后复用这一个实例 —— 正是单例方案服务需要的语义。
+     */
+    @Bean
+    public AppPlanService appPlanService(@Qualifier("deepseekReasoningStreamingChatModelPrototype") ChatModel planChatModel) {
+        return AiServices.builder(AppPlanService.class)
+                .chatModel(planChatModel)
+                .build();
     }
 
     /**

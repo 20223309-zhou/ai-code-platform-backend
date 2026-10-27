@@ -10,7 +10,7 @@ public class GenerateLogoToolTest {
     GenerateLogoTool generateLogoTool;
     @Test
     void generateLogoSvg() {
-        String s = generateLogoTool.generateLogoSvg("iPanda", "#4F7CFF","doraemon");
+        String s = generateLogoTool.generateLogoSvg("icode", "#CC9933","doraemon");
         System.out.println("SVG代码："+s);
     }
 }
