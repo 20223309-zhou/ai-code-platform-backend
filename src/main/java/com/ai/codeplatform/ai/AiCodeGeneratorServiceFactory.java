@@ -265,7 +265,7 @@ public class AiCodeGeneratorServiceFactory {
      * prototype 的 Bean 在注入时创建一次，之后复用这一个实例 —— 正是单例方案服务需要的语义。
      */
     @Bean
-    public AppPlanService appPlanService(@Qualifier("deepseekReasoningStreamingChatModelPrototype") ChatModel planChatModel) {
+    public AppPlanService appPlanService(@Qualifier("deepseekChatModelPrototype") ChatModel planChatModel) {
         return AiServices.builder(AppPlanService.class)
                 .chatModel(planChatModel)
                 .build();
