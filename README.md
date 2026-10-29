@@ -7,10 +7,12 @@
 <p align="center"><b>一句话描述需求，AI 直接生成可运行、可迭代、可部署的网页应用</b></p>
 
 <p align="center">
+  <b>简体中文</b> ·
+  <a href="README.en.md">English</a> ·
   <a href="http://www.icodeplay.site">在线体验</a> ·
   <a href="#快速开始">快速开始</a> ·
   <a href="#桌面端">桌面端</a> ·
-  <a href="https://github.com/20223309-zhou/ai-code-platform-frontend">前端仓库</a> 
+  <a href="https://github.com/20223309-zhou/ai-code-platform-frontend">前端仓库</a>
 </p>
 
 <p align="center">
