@@ -162,6 +162,60 @@ CREATE TABLE `user`  (
 INSERT INTO `user` (`id`, `userAccount`, `email`, `emailVerified`, `githubId`, `userPassword`, `userName`, `userAvatar`, `userProfile`, `userRole`, `quota`, `vipLevel`, `editTime`, `createTime`, `updateTime`, `isDelete`) VALUES (400410446946095104, 'admin', NULL, 0, NULL, '734d2f66b73652996d2104ac306a33fe', '管理员', 'https://ai-code-platform-1324613570.cos.ap-chongqing.myqcloud.com/avatar/400410446946095104_SXNzApmwNlspu3rH.jpg', '你好', 'admin', 68, '2', '2026-04-11 11:09:09', '2026-04-11 11:09:09', '2026-05-29 11:40:39', 0);
 INSERT INTO `user` (`id`, `userAccount`, `email`, `emailVerified`, `githubId`, `userPassword`, `userName`, `userAvatar`, `userProfile`, `userRole`, `quota`, `vipLevel`, `editTime`, `createTime`, `updateTime`, `isDelete`) VALUES (403664180820008960, 'user', NULL, 0, NULL, '734d2f66b73652996d2104ac306a33fe', '无名', NULL, NULL, 'user', 5, '0', '2026-04-20 10:38:18', '2026-04-20 10:38:18', '2026-05-20 10:37:46', 1);
 INSERT INTO `user` (`id`, `userAccount`, `email`, `emailVerified`, `githubId`, `userPassword`, `userName`, `userAvatar`, `userProfile`, `userRole`, `quota`, `vipLevel`, `editTime`, `createTime`, `updateTime`, `isDelete`) VALUES (412543169449906176, 'test', NULL, 0, NULL, '734d2f66b73652996d2104ac306a33fe', '无名', NULL, NULL, 'user', 5, '0', '2026-05-14 22:40:16', '2026-05-14 22:40:16', '2026-05-20 10:37:48', 0);
-INSERT INTO `user` (`id`, `userAccount`, `email`, `emailVerified`, `githubId`, `userPassword`, `userName`, `userAvatar`, `userProfile`, `userRole`, `quota`, `vipLevel`, `editTime`, `createTime`, `updateTime`, `isDelete`) VALUES (417633215303593984, 'github_20223309-zhou', NULL, 0, 250706118, '', 'Zhou Jiabao', 'https://avatars.githubusercontent.com/u/250706118?v=4', NULL, 'user', 5, '0', '2026-05-28 23:46:17', '2026-05-28 23:46:17', '2026-05-28 23:46:17', 0);
-
 SET FOREIGN_KEY_CHECKS = 1;
+-- ============================================================
+-- 2026-10-29  新增 announcement 公告表
+-- 用途：管理员发布公告，用户进站弹窗提醒（正文按 Markdown 渲染）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `announcement` (
+                                              `id` bigint NOT NULL AUTO_INCREMENT COMMENT 'id',
+                                              `title` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '公告标题',
+                                              `content` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '公告正文（Markdown）',
+                                              `level` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'INFO' COMMENT '级别：INFO / WARNING / SUCCESS',
+                                              `status` tinyint NOT NULL DEFAULT 0 COMMENT '状态：0草稿 1已发布 2已下线',
+                                              `topFlag` tinyint NOT NULL DEFAULT 0 COMMENT '是否置顶：0否 1是',
+                                              `publishTime` datetime NULL DEFAULT NULL COMMENT '发布时间，空表示立即',
+                                              `expireTime` datetime NULL DEFAULT NULL COMMENT '过期时间，空表示长期有效',
+                                              `createUserId` bigint NOT NULL COMMENT '发布人 id',
+                                              `createTime` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                                              `updateTime` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+                                              `isDelete` tinyint NOT NULL DEFAULT 0 COMMENT '是否删除：0否 1是',
+                                              PRIMARY KEY (`id`) USING BTREE,
+                                              INDEX `idx_visible`(`status` ASC, `publishTime` ASC, `expireTime` ASC) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '公告' ROW_FORMAT = Dynamic;
+-- ============================================================
+-- 2026-10-29  签到与积分体系
+-- 用途：每日签到得 1 积分，1 积分兑换 1 次生成额度（user.quota + 1）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `userPointAccount` (
+                                                  `id` bigint NOT NULL AUTO_INCREMENT COMMENT 'id',
+                                                  `userId` bigint NOT NULL COMMENT '用户 id',
+                                                  `balance` int NOT NULL DEFAULT 0 COMMENT '当前积分余额',
+                                                  `totalEarned` int NOT NULL DEFAULT 0 COMMENT '累计获得积分（只增不减）',
+                                                  `createTime` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                                                  `updateTime` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+                                                  PRIMARY KEY (`id`) USING BTREE,
+                                                  UNIQUE INDEX `uk_userId`(`userId` ASC) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '用户积分账户' ROW_FORMAT = Dynamic;
+
+CREATE TABLE IF NOT EXISTS `userSignIn` (
+                                            `id` bigint NOT NULL AUTO_INCREMENT COMMENT 'id',
+                                            `userId` bigint NOT NULL COMMENT '用户 id',
+                                            `signDate` date NOT NULL COMMENT '签到日期（Asia/Shanghai）',
+                                            `rewardPoint` int NOT NULL DEFAULT 1 COMMENT '本次获得积分',
+                                            `createTime` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '签到时间',
+                                            PRIMARY KEY (`id`) USING BTREE,
+                                            UNIQUE INDEX `uk_user_date`(`userId` ASC, `signDate` ASC) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '用户签到记录' ROW_FORMAT = Dynamic;
+
+CREATE TABLE IF NOT EXISTS `pointRecord` (
+                                             `id` bigint NOT NULL AUTO_INCREMENT COMMENT 'id',
+                                             `userId` bigint NOT NULL COMMENT '用户 id',
+                                             `type` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '类型：SIGN_IN 签到 / EXCHANGE 兑换 / ADMIN_ADJUST 管理员调整',
+                                             `amount` int NOT NULL COMMENT '变动数量，正数为获得，负数为消耗',
+                                             `balanceAfter` int NOT NULL COMMENT '变动后余额（用于对账）',
+                                             `remark` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '备注',
+                                             `createTime` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                                             PRIMARY KEY (`id`) USING BTREE,
+                                             INDEX `idx_user_time`(`userId` ASC, `createTime` ASC) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '积分流水' ROW_FORMAT = Dynamic;
