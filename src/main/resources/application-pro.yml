@@ -76,6 +76,18 @@ langchain4j:
       temperature: 0.7
       log-requests: false
       log-responses: false
+    # 方案预选模型：与路由模型同源，但 max-tokens 放大到 2000
+    # （路由只输出一个枚举值，100 够；方案要输出完整 JSON，100 会截断）
+    # 需要独立配置时设置 PLAN_AI_BASE_URL / PLAN_AI_API_KEY / PLAN_AI_MODEL_NAME
+    plan-chat-model:
+      base-url: ${PLAN_AI_BASE_URL:${ROUTING_AI_BASE_URL}}
+      api-key: ${PLAN_AI_API_KEY:${ROUTING_AI_API_KEY}}
+      model-name: ${PLAN_AI_MODEL_NAME:${ROUTING_AI_MODEL_NAME}}
+      max-tokens: 2000
+      temperature: 0.7
+      log-requests: false
+      log-responses: false
+
     chat-model:
       # 严格确保结构化输出生效
 #      strict-json-schema: true

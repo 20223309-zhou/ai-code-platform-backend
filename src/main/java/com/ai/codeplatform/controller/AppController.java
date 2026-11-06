@@ -186,7 +186,6 @@ public class AppController {
 
     /**
      * 把「已看过的方案」拼进给模型的用户消息。
-     * <p>
      * 不做成 {@code AppPlanService} 的第二个参数，是因为 langchain4j 对参数 ≥ 2 的方法
      * 要求每个参数都带 {@code @UserMessage/@V/@MemoryId} 之类注解，为一个纯文本约束
      * 去改接口签名并不划算。
@@ -212,10 +211,8 @@ public class AppController {
 
     /**
      * 换方案：清空当前应用的生成产物，让下一轮从零开始。
-     * <p>
      * 只删 {@code code_output} 下的工作目录，<b>不动 code_deploy</b> —— 已部署的线上版本
      * 删掉就是站点直接 404，而用户只是想换个方向重做，并没打算把应用下线。
-     * <p>
      * 目录名由 {@code codeGenType + "_" + appId} 派生，不接受客户端传路径；
      * 另外再做一次 canonicalPath 校验，防止拼接结果意外越出工作区。
      */

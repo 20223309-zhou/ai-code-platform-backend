@@ -13,6 +13,7 @@ import com.ai.codeplatform.ai.model.message.ToolRequestMessage;
 import com.ai.codeplatform.ai.model.message.StreamMessageTypeEnum;
 import com.ai.codeplatform.constant.AppConstant;
 import com.ai.codeplatform.core.builder.VueProjectBuilder;
+import com.ai.codeplatform.rag.RagSwitchHolder;
 import com.ai.codeplatform.core.parser.CodeParserExecutor;
 import com.ai.codeplatform.core.saver.CodeFileSaverExecutor;
 import com.ai.codeplatform.exception.BusinessException;
@@ -62,6 +63,13 @@ public class AiCodeGeneratorFacade {
         if (codeGenTypeEnum == null) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "生成类型为空");
         }
+        // 告诉 RAG「当前是哪种技术栈」，检索时按 project_type 过滤。
+        // 不这么做的话，知识库里其它框架的代码会被当作"风格参考"注入，
+        // 最典型的后果是 React 项目检索到 Vue 代码后把 v-if / @click 写进 JSX。
+        // 取值与向量库 metadata 一致：html / multi / vue / react
+        // （CodeGenTypeEnum 的 value 是 html / multi_file / vue_project / react_project，
+        //  统一取第一段，与 SplitExecutor 里解析目录名的规则保持一致）
+        RagSwitchHolder.setProjectType(codeGenTypeEnum.getValue().split("_")[0]);
         // 根据 appId 获取对应的 AI 服务实例
         AiCodeGeneratorService aiCodeGeneratorService = aiCodeGeneratorServiceFactory.getAiCodeGeneratorService(appId, codeGenTypeEnum,modelName);
         // 把图片注入记忆：langchain4j 对 @UserMessage UserMessage 参数会序列化为 toString() 导致图片丢失，
@@ -88,6 +96,13 @@ public class AiCodeGeneratorFacade {
                 String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/vue_project_" + appId;
                 FileUtil.mkdir(projectPath);
                 TokenStream codeStream = aiCodeGeneratorService.generateVueProjectCodeStream(appId, userText);
+                yield processTokenStream(codeStream, appId);
+            }
+            case REACT_PROJECT -> {
+                // 与 Vue 工程模式同构：独立目录前缀、独立提示词，其余（工具集、构建、流处理）完全复用
+                String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/react_project_" + appId;
+                FileUtil.mkdir(projectPath);
+                TokenStream codeStream = aiCodeGeneratorService.generateReactProjectCodeStream(appId, userText);
                 yield processTokenStream(codeStream, appId);
             }
             default -> {

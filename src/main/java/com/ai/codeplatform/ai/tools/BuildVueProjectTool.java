@@ -15,7 +15,11 @@ import java.nio.file.Path;
 import java.util.Locale;
 
 /**
- * Vue 项目构建工具
+ * 前端工程构建工具（Vue / React 通用）
+ * <p>
+ * 名字里的 Vue 是历史原因：方法名 {@code buildVueProject} 已被两个系统提示词引用，
+ * 改名会连带改动提示词和工具注册，收益不大。实际执行的是 {@code npm install + npm run build}，
+ * 与框架无关 —— React 工程模式复用同一套构建链路。
  * <p>
  * 把构建能力交给 AI：代码生成/修改完成后由 AI 自行调用构建验证，
  * 构建失败时错误日志会返回给 AI，由其分析原因、修复代码、重新构建，
@@ -46,13 +50,13 @@ public class BuildVueProjectTool extends BaseTool {
     @Resource
     private VueProjectBuilder vueProjectBuilder;
 
-    @Tool("构建当前 Vue 项目（自动执行 npm install + npm run build）。所有文件创建或修改完成后必须调用一次，验证项目可构建；若返回构建失败，必须根据错误日志定位问题、修复代码后再次调用本工具，直到构建成功")
+    @Tool("构建当前前端项目（自动执行 npm install + npm run build，Vue 与 React 工程通用）。所有文件创建或修改完成后必须调用一次，验证项目可构建；若返回构建失败，必须根据错误日志定位问题、修复代码后再次调用本工具，直到构建成功")
     public String buildVueProject(@ToolMemoryId Long appId) {
         Path projectRoot = BaseTool.resolveProjectRootDir(appId);
         if (projectRoot == null) {
             return "错误: 找不到应用 " + appId + " 的项目目录";
         }
-        log.info("AI 发起构建 Vue 项目, appId: {}, 目录: {}", appId, projectRoot);
+        log.info("AI 发起构建前端项目, appId: {}, 目录: {}", appId, projectRoot);
 
         // 是否跳过 npm install：
         // 不能只看 node_modules 是否存在。AI 在修复循环里会新增依赖（如 element-plus），
@@ -144,7 +148,7 @@ public class BuildVueProjectTool extends BaseTool {
 
     @Override
     public String getDisplayName() {
-        return "构建 Vue 项目";
+        return "构建项目";
     }
 
     @Override

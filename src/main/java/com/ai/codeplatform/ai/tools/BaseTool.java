@@ -50,13 +50,13 @@ public abstract class BaseTool {
     }
 
     /**
-     * 根据 appId 查找对应的项目根目录（兼容多种生成模式：vue_project、multi_file、html）
+     * 根据 appId 查找对应的项目根目录（兼容多种生成模式：vue_project、react_project、multi_file、html）
      * 如果目录不存在，自动创建默认的 vue_project 目录作为回退
      */
     protected static Path resolveProjectRootDir(Long appId) {
         // 获得输出目录
         Path outputDir = Paths.get(AppConstant.CODE_OUTPUT_ROOT_DIR);
-        String[] prefixes = {"vue_project_", "multi_file_", "html_"};
+        String[] prefixes = {"vue_project_", "react_project_", "multi_file_", "html_"};
         // 尝试匹配前缀
         for (String prefix : prefixes) {
             // 拼接目录的绝对路径

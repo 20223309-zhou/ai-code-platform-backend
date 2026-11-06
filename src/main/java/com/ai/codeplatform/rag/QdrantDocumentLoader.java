@@ -181,6 +181,6 @@ public class QdrantDocumentLoader {
      */
     private boolean isSupportedFile(String path) {
         String ext = getFileExtension(path).toLowerCase();
-        return Set.of("vue", "html", "js", "css").contains(ext);
+        return Set.of("vue", "html", "js", "css", "jsx", "tsx", "ts").contains(ext);
     }
 }

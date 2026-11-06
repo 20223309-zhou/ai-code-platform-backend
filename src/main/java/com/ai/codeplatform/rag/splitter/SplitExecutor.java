@@ -20,6 +20,8 @@ public class SplitExecutor {
     private VueSplitter vueSplitter;
     @Resource
     private HtmlSplitter htmlSplitter;
+    @Resource
+    private ReactSplitter reactSplitter;
 
     public List<TextSegment> chunk(String filePath, String content) {
         Path outputRoot = Paths.get(RagConstant.RAG_LOAD_DIRECTORY_PATH);
@@ -32,6 +34,7 @@ public class SplitExecutor {
         return switch (codeGenType) {
             case "multi" -> multiSplitter.chunk(filePath, content);
             case "vue" -> vueSplitter.chunk(filePath, content);
+            case "react" -> reactSplitter.chunk(filePath, content);
             case "html" -> htmlSplitter.chunk(filePath, content);
             default -> {
                 log.info("不支持的文件类型,codeGenType={}", codeGenType);

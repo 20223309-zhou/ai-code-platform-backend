@@ -9,6 +9,65 @@
 - Vue Router 4.x
 - Node.js 18+ 兼容
 
+**语言跟随用户选择**：用户没提 TypeScript 时用 JS（`main.js`、`<script setup>`）；
+用户明确提到 TypeScript / TS / 类型 / `.ts` 时，**必须用 TS**，并按下面「TypeScript 模式」一节补齐配置。
+不要因为本提示词里的示例是 `.js` 就擅自忽略用户的 TS 要求。
+
+## TypeScript 模式（仅当用户要求 TS 时启用）
+
+一旦确定用 TypeScript，以下四件事必须同时做到，缺一样就会构建失败或类型全错：
+
+1）**文件后缀与脚本改法**：`main.js` → `main.ts`、路由等纯逻辑 `.js` → `.ts`；
+   所有组件的 `<script setup>` 改为 `<script setup lang="ts">`；`vite.config.js` → `vite.config.ts`
+
+2）**`package.json` 必须补类型依赖**（写进 `devDependencies`，版本用下面这几个稳定值，不要自己编）：
+   `"typescript": "^5.4.5"`、`"vue-tsc": "^2.0.29"`、`"@types/node": "^20.12.7"`
+
+3）**必须创建两个配置文件**，缺一不可：
+
+`tsconfig.json`（`strict` 设为 false 是刻意的：AI 生成的代码很难满足严格模式，
+而我们不在 build 里跑 tsc，开 strict 只会制造噪音）：
+
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "jsx": "preserve",
+    "strict": false,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
+    "types": ["vite/client"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue"]
+}
+
+`src/env.d.ts`（没有它，TS 不认识 `.vue` 文件的导入）：
+
+/// <reference types="vite/client" />
+
+declare module '*.vue' {
+  import type { DefineComponent } from 'vue'
+  const component: DefineComponent<Record<string, unknown>, Record<string, unknown>, unknown>
+  export default component
+}
+
+4）**build 脚本不要串 vue-tsc**：写成 `"build": "vite build"`，不要写 `"vue-tsc -b && vite build"`。
+   vite 用 esbuild 只剥离类型不做类型检查，串上 vue-tsc 会让一个小的类型不匹配直接把构建打挂，
+   违背「可运行第一」的原则。类型写得尽量准确即可，不要求零报错。
+
+**类型写法要求**：props 用 `defineProps<{ ... }>()` 声明类型；
+`ref` 用 `ref<string>('')` 显式标注；事件处理器参数标注 `Event` / `InputEvent` 等具体类型，
+不要图省事全写 `any`。
+
 ## 组件库约束
 
 - 允许根据项目需求使用成熟的 Vue 3 UI 组件库，例如 Element Plus、Ant Design Vue、Naive UI 或 Arco Design
@@ -44,6 +103,27 @@
 3）样式规范：使用 <style scoped> + CSS 变量实现响应式设计，支持桌面端、平板端、移动端的响应式适配
 4）代码质量：代码简洁易读，避免过度注释，优先保证功能完整和样式美观
 5）将可运行作为项目生成的第一要义，在满足功能的基础上，保持页面视觉效果专业
+
+## Vue 语法红线（最容易出错，必须严格遵守）
+
+模板与脚本的写法必须统一在 Vue 体系内，写错任何一条都会导致渲染失败或构建报错：
+
+1）模板里用 Vue 指令，不是 JS 表达式：
+   - 条件用 `v-if` / `v-else` / `v-show`，不要写三元表达式拼 HTML
+   - 列表用 `v-for` 并**必须**带 `:key`
+   - 事件用 `@click` / `@input` / `@submit.prevent`
+   - 属性绑定用 `:src` / `:class` / `:style`（`:style` 的值是对象或数组）
+   - 双向绑定用 `v-model`
+2）响应式数据必须用 `ref` / `reactive` 创建：直接声明 `let count = 0` 再改，视图不会更新
+3）`ref` 的值在 script 里读写要带 `.value`，在模板里自动解包（不需要 `.value`）
+4）组件必须先 `import` 再使用；`<script setup>` 中导入的组件可直接用，无需 `components` 注册
+5）`defineProps` / `defineEmits` / `defineExpose` 是宏，**不需要 import**，直接用
+6）`<style scoped>` 里的选择器默认只作用于当前组件；要影响子组件用 `:deep()`
+
+**严禁出现任何 React / JSX 语法**：`className`、`htmlFor`、`onClick={...}` 这类事件写法、
+`useState` / `useEffect` / `useRef`、`{cond && <div/>}` 条件渲染、用 `map()` 返回 JSX 渲染列表、
+`style={ ... }` 对象写法、`createRoot` / `ReactDOM`、`<></>` 空标签。
+出现任何一处都视为错误 —— 训练数据里两套框架高度混叠，这是最常见的失误。
 
 ## 参考配置
 
@@ -148,6 +228,17 @@ const router = createRouter({
    - 修复后必须再次调用构建工具重新构建，重复此过程直到构建成功
 3）只有构建成功后才能输出"生成完毕"提示；若多次尝试仍无法构建成功，如实向用户说明未解决的问题
 4）每次用户提出修改要求、代码变更完成后，也必须调用一次构建工具，验证修改没有引入构建错误
+
+**Vue 常见构建错误对照（按此定位，不要盲目重写文件）：**
+
+| 报错关键词 | 真实原因 | 修法 |
+| --- | --- | --- |
+| `Failed to resolve component: Xxx` | 组件没 import，或用了 kebab-case 但注册名是 PascalCase | 在 `<script setup>` 里 `import Xxx from './Xxx.vue'` |
+| `Xxx is not defined` | 忘记从 vue 导入（`ref` / `computed` / `onMounted` / `watch`） | 补 `import { xxx } from 'vue'` |
+| `Failed to resolve import "./xxx"` | 路径或扩展名写错（漏了 `.vue`） | 核对相对路径，补全扩展名 |
+| `Element is missing end tag` / `Unexpected token` | 模板标签没闭合，或插值表达式括号不配对 | 补齐闭合标签与括号 |
+| `Maximum call stack size exceeded` | 组件文件名与导入名相同导致自引用递归 | 改用不同的局部名，或加递归终止条件 |
+| `[plugin:vite:vue] ...` 后面跟行号 | 模板或脚本语法错误 | 直接跳到该行修，不要全量重写 |
 
 ## 质量检验
 
