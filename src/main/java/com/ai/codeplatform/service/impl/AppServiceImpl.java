@@ -10,6 +10,8 @@ import cn.hutool.json.JSONUtil;
 import com.ai.codeplatform.ai.AiCodeGenTypeRoutingService;
 import com.ai.codeplatform.ai.AiCodeGenTypeRoutingServiceFactory;
 import com.ai.codeplatform.constant.AppConstant;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import com.ai.codeplatform.core.AiCodeGeneratorFacade;
 import com.ai.codeplatform.manager.CancelGenerationManager;
 import com.ai.codeplatform.core.builder.VueProjectBuilder;
@@ -64,6 +66,13 @@ import static com.ai.codeplatform.constant.RagConstant.RAG_LOAD_DIRECTORY_PATH;
 @Slf4j
 @Service
 public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppService {
+
+    /** 兜底应用名截取的字符数（按 codePoint 计，中文 / emoji 都算一个字符） */
+    private static final int FALLBACK_APP_NAME_LENGTH = 10;
+
+    /** 提示词里提不出有效名称时的默认应用名 */
+    private static final String DEFAULT_APP_NAME = "未命名应用";
+
     @Resource
     private UserService userService;
 
@@ -120,7 +129,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         App app = new App();
         BeanUtil.copyProperties(appAddRequest, app);
         app.setUserId(loginUser.getId());
-        app.setAppName(generateAppName(initPrompt));
+        // 应用名先用初始提示词的前 10 个字符占位（同步、零成本），
+        // 真正的名字由事务提交后的虚拟线程异步生成并回填 —— 不再阻塞创建接口等模型返回
+        app.setAppName(buildFallbackAppName(initPrompt));
         // 代码生成类型：用户显式指定具体类型时直接使用（创建后不可更改）；
         // 未指定或选择“智能选择(auto)”时，由 AI 根据 initPrompt 路由（保持原有默认行为）。
         AiCodeGenTypeRoutingService routingService = aiCodeGenTypeRoutingServiceFactory.createAiCodeGenTypeRoutingService();
@@ -173,7 +184,76 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
             throw new BusinessException(ErrorCode.OPERATION_ERROR);
         }
         log.info("应用创建成功，ID: {}, 类型: {}", app.getId(), selectedCodeGenType.getValue());
+        // 必须等事务提交后再异步取名：@Transactional 里刚插入的行对其它连接不可见，
+        // 此时异步线程 update 会命中 0 行（微服务版用 TransactionTemplate 规避，这里用 afterCommit）
+        scheduleAppNameUpdate(initPrompt, app);
         return app;
+    }
+
+    /**
+     * 事务提交后触发异步取名。
+     * <p>
+     * 不能直接在 createApp 里起线程：它带 @Transactional，刚插入的行对其它连接不可见，
+     * 异步线程此时 update 会命中 0 行。afterCommit 保证拿到的是已提交的数据。
+     */
+    private void scheduleAppNameUpdate(String initPrompt, App app) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            updateAppNameAsync(initPrompt, app);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                updateAppNameAsync(initPrompt, app);
+            }
+        });
+    }
+
+    /**
+     * 虚拟线程异步生成正式应用名并回填。
+     * 取名要等模型返回（秒级），放在创建流程里会让接口跟着卡住
+     * 虚拟线程在等 IO 时几乎不占平台线程，适合这种场景。
+     */
+    private void updateAppNameAsync(String initPrompt, App app) {
+        Thread.ofVirtual().start(() -> {
+            try {
+                String generatedName = generateAppName(initPrompt);
+                if (StrUtil.isBlank(generatedName) || generatedName.equals(app.getAppName())) {
+                    return;
+                }
+                boolean updated = updateChain()
+                        .set(App::getAppName, generatedName)
+                        .where(App::getId).eq(app.getId())
+                        .update();
+                if (updated) {
+                    log.info("应用 ID {} 异步更新应用名: {}", app.getId(), generatedName);
+                } else {
+                    log.warn("应用 ID {} 异步更新应用名失败", app.getId());
+                }
+            } catch (Exception e) {
+                log.warn("应用 ID {} 异步生成应用名失败", app.getId(), e);
+            }
+        });
+    }
+
+    /**
+     * 兜底应用名：取初始提示词的前 10 个字符，去掉控制字符与标点。
+     * 按 codePoint 截取而不是 char —— 中文和 emoji 用 char 截会被劈成半个字符。
+     */
+    private String buildFallbackAppName(String initPrompt) {
+        if (StrUtil.isBlank(initPrompt)) {
+            return DEFAULT_APP_NAME;
+        }
+        String trimmed = initPrompt.strip();
+        int codePointCount = trimmed.codePointCount(0, trimmed.length());
+        String head = codePointCount > FALLBACK_APP_NAME_LENGTH
+                ? trimmed.substring(0, trimmed.offsetByCodePoints(0, FALLBACK_APP_NAME_LENGTH))
+                : trimmed;
+        // \p{L} 任意语言字母（含中文）、\p{N} 数字、\s 空白、\p{So} 符号（emoji）；其余标点/控制符去掉
+        String name = head.replaceAll("[^\\p{L}\\p{N}\\s\\p{So}]", "")
+                .replaceAll("\\s+", " ")
+                .strip();
+        return StrUtil.isBlank(name) ? DEFAULT_APP_NAME : name;
     }
 
     /**

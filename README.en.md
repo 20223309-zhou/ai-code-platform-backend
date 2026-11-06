@@ -61,19 +61,24 @@
 ## Screenshots
 
 <p align="center">
-  <img src="assets/首页.png" alt="Home: describe your idea and start generating" width="100%" />
+  <img src="assets/首页-亮色.png" alt="Home: describe your idea and start generating" width="100%" />
   <br />
+  <img src="assets/首页-深色.png" alt="Home: describe your idea and start generating" width="100%" />
   <sub>Home — describe your idea, attach references, choose generation type and model</sub>
 </p>
 
 <p align="center">
-  <img src="assets/对话页.png" alt="Chat page: conversation on the left, live preview on the right" width="100%" />
+  <img src="assets/对话页-亮色.png" alt="Chat page: conversation on the left, live preview on the right" width="100%" />
+  <br />
+  <img src="assets/对话页-深色.png" alt="Chat page: conversation on the left, live preview on the right" width="100%" />
   <br />
   <sub>Chat — iterate with the AI on the left, watch the result render on the right</sub>
 </p>
 
 <p align="center">
-  <img src="assets/模板广场.png" alt="Template gallery" width="100%" />
+  <img src="assets/模板广场-亮色.png" alt="Template gallery" width="100%" />
+  <br />
+  <img src="assets/模板广场-深色.png" alt="Template gallery" width="100%" />
   <br />
   <sub>Template Gallery — browse curated templates and reuse one in a click</sub>
 </p>
