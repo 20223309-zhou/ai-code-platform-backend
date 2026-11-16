@@ -1,5 +1,6 @@
 package com.ai.codeplatform.ai;
 
+import cn.hutool.core.util.StrUtil;
 import com.ai.codeplatform.ai.guardrail.PromptSafetyInputGuardrail;
 import com.ai.codeplatform.ai.tools.*;
 import com.ai.codeplatform.exception.BusinessException;
@@ -10,6 +11,7 @@ import com.ai.codeplatform.service.ChatHistoryOriginalService;
 import com.ai.codeplatform.utils.SpringContextUtil;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.Content;
 import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
@@ -122,12 +124,32 @@ public class AiCodeGeneratorServiceFactory {
         MessageWindowChatMemory chatMemory = memoryCache.getIfPresent(appId);
         if (chatMemory == null) {
             return;
-        }
-        List<Content> images = userMessage.contents().stream()
+        }        List<Content> images = userMessage.contents().stream()
                 .filter(content -> content instanceof ImageContent)
                 .collect(Collectors.toList());
         if (!images.isEmpty()) {
             chatMemory.add(UserMessage.from(images));
+        }
+    }
+
+    /**
+     * 把「被中断的回复」补进该 appId 的对话记忆。
+     * @param appId 应用 ID
+     * @param text  已生成的 AI 文本（调用方负责带上中断标记）
+     */
+    public void appendAssistantTextToMemory(Long appId, String text) {
+        if (appId == null || StrUtil.isBlank(text)) {
+            return;
+        }
+        MessageWindowChatMemory chatMemory = memoryCache.getIfPresent(appId);
+        if (chatMemory == null) {
+            // 记忆还没被加载（例如服务刚重启），下次请求会从数据库回放，不需要在这里兜底
+            return;
+        }
+        try {
+            chatMemory.add(AiMessage.from(text));
+        } catch (Exception e) {
+            log.warn("补写中断回复到对话记忆失败，appId: {}, 原因: {}", appId, e.toString());
         }
     }
 

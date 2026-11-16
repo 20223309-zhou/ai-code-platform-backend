@@ -30,6 +30,7 @@ import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.FluxSink;
 
 import java.io.File;
 import java.util.Map;
@@ -113,6 +114,18 @@ public class AiCodeGeneratorFacade {
     }
 
     /**
+     * 中断收尾：先发一个中断哨兵，再正常 complete。
+     * 为什么不直接 {@code sink.complete()}：对下游来说那和「模型正常写完」完全一样，
+     * 只会触发 doOnComplete，落库时无法区分，既不会打中断标记，也不会补对话记忆。
+     * 哨兵是让「服务端主动取消」可被识别的唯一信号，handler 收到后置位并丢掉这一帧
+     * （不展示、不入库）。
+     */
+    private void completeAsInterrupted(FluxSink<String> sink) {
+        sink.next(JSONUtil.toJsonStr(Map.of("type", StreamMessageTypeEnum.INTERRUPTED.getValue())));
+        sink.complete();
+    }
+
+    /**
      * 将 TokenStream 转换为 Flux<String>，并传递工具调用信息
      * @param tokenStream TokenStream 对象
      * @return Flux<String> 流式响应
@@ -128,7 +141,7 @@ public class AiCodeGeneratorFacade {
                             context.streamingHandle().cancel();
                             log.info("生成阶段，用户取消生成，取消任务：{}", appId);
                             cancelGenerationManager.remove(appId);
-                            sink.complete();
+                            completeAsInterrupted(sink);
                             return;
                         }
                         // 封装AI响应消息并发送到流中
@@ -140,7 +153,7 @@ public class AiCodeGeneratorFacade {
                             context.streamingHandle().cancel();
                             log.info("思考阶段，用户取消生成，取消任务：{}", appId);
                             cancelGenerationManager.remove(appId);
-                            sink.complete();
+                            completeAsInterrupted(sink);
                             return;
                         }
                         Map<String, String> thinkingMsg = Map.of(
@@ -153,7 +166,7 @@ public class AiCodeGeneratorFacade {
                         if (cancelGenerationManager.isCancelled(appId)) {
                             context.streamingHandle().cancel();
                             cancelGenerationManager.remove(appId);
-                            sink.complete();
+                            completeAsInterrupted(sink);
                             return;
                         }
                         // 标记 AI 是否自行发起了构建
@@ -171,7 +184,7 @@ public class AiCodeGeneratorFacade {
                     // 处理工具执行完成后的结果
                     .onToolExecuted((ToolExecution toolExecution) -> {
                         if (cancelGenerationManager.isCancelled(appId)) {
-                            sink.complete();
+                            completeAsInterrupted(sink);
                             return;
                         }
                         ToolExecutedMessage toolExecutedMessage = new ToolExecutedMessage(toolExecution);
@@ -223,7 +236,7 @@ public class AiCodeGeneratorFacade {
                             context.streamingHandle().cancel();
                             log.info("生成阶段，用户取消生成，取消任务：{}", appId);
                             cancelGenerationManager.remove(appId);
-                            sink.complete();
+                            completeAsInterrupted(sink);
                             return;
                         }
                         codeBuilder.append(partialResponse.text());
@@ -239,7 +252,7 @@ public class AiCodeGeneratorFacade {
                             context.streamingHandle().cancel();
                             log.info("思考阶段，用户取消生成，取消任务：{}", appId);
                             cancelGenerationManager.remove(appId);
-                            sink.complete();
+                            completeAsInterrupted(sink);
                             return;
                         }
                         // 将AI思考过程封装为map后，转为json字符串给下游处理
@@ -254,7 +267,7 @@ public class AiCodeGeneratorFacade {
                         if (cancelGenerationManager.isCancelled(appId)) {
                             context.streamingHandle().cancel();
                             cancelGenerationManager.remove(appId);
-                            sink.complete();
+                            completeAsInterrupted(sink);
                             return;
                         }
                         // 只有写文件的工具才标记跳过保存，只读工具（WebFetch/FileRead）不阻塞
@@ -273,7 +286,7 @@ public class AiCodeGeneratorFacade {
                     // 处理工具执行完成后的结果
                     .onToolExecuted((ToolExecution toolExecution) -> {
                         if (cancelGenerationManager.isCancelled(appId)) {
-                            sink.complete();
+                            completeAsInterrupted(sink);
                             return;
                         }
                         ToolExecutedMessage toolExecutedMessage = new ToolExecutedMessage(toolExecution);

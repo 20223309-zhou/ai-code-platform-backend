@@ -3,6 +3,7 @@ package com.ai.codeplatform.core.handler;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
+import com.ai.codeplatform.ai.AiCodeGeneratorServiceFactory;
 import com.ai.codeplatform.ai.model.message.*;
 import com.ai.codeplatform.ai.tools.BaseTool;
 import com.ai.codeplatform.ai.tools.ToolManager;
@@ -20,6 +21,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * JSON 消息流处理器
@@ -29,8 +31,16 @@ import java.util.Set;
 @Component
 public class JsonMessageStreamHandler {
 
+    /**
+     * 中断标记：写进历史与记忆，让下一轮模型知道自己上一次没写完。
+     */
+    private static final String INTERRUPT_MARKER = "\n\n> ⏹ 本次生成已被用户中断。";
+
     @Resource
     private ToolManager toolManager;
+
+    @Resource
+    private AiCodeGeneratorServiceFactory aiCodeGeneratorServiceFactory;
 
     /**
      * 处理 TokenStream
@@ -54,34 +64,34 @@ public class JsonMessageStreamHandler {
         List<ChatHistoryOriginal> originalChatHistoryList = new ArrayList<>();
         // 用于跟踪已经见过的工具名，同一工具多次调用只显示一次选择消息
         Set<String> seenToolNames = new HashSet<>();
+        // 服务端主动取消时 Facade 会先发一个中断哨兵，这里置位后按「中断」落库
+        AtomicBoolean interrupted = new AtomicBoolean(false);
         return originFlux
                 .map(chunk -> {
                     // 解析每个 JSON 消息块
-                    return handleJsonMessageChunk(chunk, chatHistoryStringBuilder, aiResponseStringBuilder, originalChatHistoryList, seenToolNames);
+                    return handleJsonMessageChunk(chunk, chatHistoryStringBuilder, aiResponseStringBuilder,
+                            originalChatHistoryList, seenToolNames, interrupted);
                 })
                 .filter(StrUtil::isNotEmpty) // 过滤空字串
                 .doOnComplete(() -> {
-                    // 工具调用信息入库
-                    if (!originalChatHistoryList.isEmpty()) {
-                        // 完善 ChatHistoryOriginal 信息
-                        originalChatHistoryList.forEach(chatHistory -> {
-                            chatHistory.setAppId(appId);
-                            chatHistory.setUserId(loginUser.getId());
-                        });
-                        // 批量入库
-                        chatHistoryOriginalService.addOriginalChatMessageBatch(originalChatHistoryList);
+                    // 正常写完是 false；服务端主动取消（收到过哨兵）走这里时是 true
+                    boolean wasInterrupted = interrupted.get();
+                    String partial = persistCollected(chatHistoryService, chatHistoryOriginalService,
+                            appId, loginUser, originalChatHistoryList,
+                            chatHistoryStringBuilder, aiResponseStringBuilder, wasInterrupted);
+                    if (wasInterrupted) {
+                        aiCodeGeneratorServiceFactory.appendAssistantTextToMemory(appId, partial);
                     }
-                    // Ai response 入库（只有当有内容时才保存）
-                    String aiResponseStr = aiResponseStringBuilder.toString();
-                    if (StrUtil.isNotBlank(aiResponseStr)) {
-                        chatHistoryOriginalService.addOriginalChatMessage(appId, aiResponseStr, ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
-                    }
-
-                    // 流式响应完成后，添加 AI 消息到对话历史（只有当有内容时才保存）
-                    String chatHistoryStr = chatHistoryStringBuilder.toString();
-                    if (StrUtil.isNotBlank(chatHistoryStr)) {
-                        chatHistoryService.addChatMessage(appId, chatHistoryStr, ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
-                    }
+                })
+                .doOnCancel(() -> {
+                    // 用户点「停止生成」时前端先断开 SSE，订阅收到的是 cancel 而不是 complete。
+                    // 不在这里落库，已经生成的内容会随请求一起丢掉：重新进入会话只剩一条用户消息。
+                    String partial = persistCollected(chatHistoryService, chatHistoryOriginalService,
+                            appId, loginUser, originalChatHistoryList,
+                            chatHistoryStringBuilder, aiResponseStringBuilder, true);
+                    // langchain4j 只在响应完整结束时才把 AiMessage 写进 ChatMemory，
+                    // 取消时补一条，否则同一会话里继续对话模型会完全不知道自己写到哪
+                    aiCodeGeneratorServiceFactory.appendAssistantTextToMemory(appId, partial);
                 })
                 .doOnError(error -> {
                     // 如果AI回复失败，也要记录错误消息
@@ -92,13 +102,75 @@ public class JsonMessageStreamHandler {
     }
 
     /**
+     * 把流过程中收集到的内容落库。正常结束与中断共用同一套逻辑，只是中断时多一个标记。
+     *
+     * @param chatHistoryService         面向用户的会话历史
+     * @param chatHistoryOriginalService 用于回放记忆的原始历史
+     * @param appId        应用 ID
+     * @param loginUser    登录用户
+     * @param toolRecords  已发生的工具调用记录
+     * @param displayText  给前端展示的完整文本
+     * @param aiText       用于回放记忆的 AI 正文
+     * @param interrupted  是否为中断场景
+     * @return 实际写入的 AI 文本（中断时含标记）；没有任何内容时返回 null
+     */
+    private String persistCollected(ChatHistoryService chatHistoryService,
+                                    ChatHistoryOriginalService chatHistoryOriginalService,
+                                    long appId, User loginUser,
+                                    List<ChatHistoryOriginal> toolRecords,
+                                    StringBuilder displayText, StringBuilder aiText,
+                                    boolean interrupted) {
+        try {
+            String aiContent = aiText.toString();
+            String displayContent = displayText.toString();
+            if (interrupted) {
+                // 只在各自确实有内容时加标记：模型还在调工具、一个字都没产出时，
+                // 不该凭空造出一条只含标记的空回复
+                if (StrUtil.isNotBlank(aiContent)) {
+                    aiContent = aiContent + INTERRUPT_MARKER;
+                }
+                if (StrUtil.isNotBlank(displayContent)) {
+                    displayContent = displayContent + INTERRUPT_MARKER;
+                }
+            }
+            // 工具调用信息入库
+            if (!toolRecords.isEmpty()) {
+                toolRecords.forEach(chatHistory -> {
+                    chatHistory.setAppId(appId);
+                    chatHistory.setUserId(loginUser.getId());
+                });
+                chatHistoryOriginalService.addOriginalChatMessageBatch(toolRecords);
+            }
+            // Ai response 入库（只有当有内容时才保存）
+            if (StrUtil.isNotBlank(aiContent)) {
+                chatHistoryOriginalService.addOriginalChatMessage(appId, aiContent,
+                        ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
+            }
+            // 流式响应完成后，添加 AI 消息到对话历史（只有当有内容时才保存）
+            if (StrUtil.isNotBlank(displayContent)) {
+                chatHistoryService.addChatMessage(appId, displayContent,
+                        ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
+            }
+            if (interrupted) {
+                log.info("生成被中断，已落库已生成内容，appId: {}, 长度: {}", appId, displayContent.length());
+            }
+            return StrUtil.isBlank(aiContent) ? null : aiContent;
+        } catch (Exception e) {
+            // 落库失败不能影响取消流程本身（此时连接已经断了，抛出去也没人接）
+            log.error("保存对话历史失败，appId: {}, 中断: {}, 原因: {}", appId, interrupted, e.toString());
+            return null;
+        }
+    }
+
+    /**
      * 解析并收集 TokenStream 数据
      */
     private String handleJsonMessageChunk(String chunk,
                                           StringBuilder chatHistoryStringBuilder,
                                           StringBuilder aiResponseStringBuilder,
                                           List<ChatHistoryOriginal> originalChatHistoryList,
-                                          Set<String> seenToolNames) {
+                                          Set<String> seenToolNames,
+                                          AtomicBoolean interrupted) {
         // 解析 JSON
         StreamMessage streamMessage = JSONUtil.toBean(chunk, StreamMessage.class);
         StreamMessageTypeEnum typeEnum = StreamMessageTypeEnum.getEnumByValue(streamMessage.getType());
@@ -171,6 +243,11 @@ public class JsonMessageStreamHandler {
                     chatHistoryStringBuilder.append(output);
                     return output;
                 }
+            }
+            case INTERRUPTED -> {
+                // 中断哨兵：只置位，不返回任何内容（filter 会丢掉空串，前端看不到这一帧）
+                interrupted.set(true);
+                return "";
             }
             case THINKING -> {
                 // 推理过程：直接透传原始 JSON，前端自行解析渲染
