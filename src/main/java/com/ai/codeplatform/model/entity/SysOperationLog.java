@@ -109,6 +109,42 @@ public class SysOperationLog implements Serializable {
     private String status;
 
     /**
+     * 本次调用使用的 AI 模型名（仅 AI 生成类接口有值）
+     */
+    @Column("modelName")
+    private String modelName;
+
+    /**
+     * 提示词侧 token 数
+     */
+    @Column("inputTokens")
+    private Integer inputTokens;
+
+    /**
+     * 生成侧 token 数
+     */
+    @Column("outputTokens")
+    private Integer outputTokens;
+
+    /**
+     * 合计 token 数
+     */
+    @Column("totalTokens")
+    private Integer totalTokens;
+
+    /**
+     * 模型调用轮次：1 表示单轮、没有工具调用；数字大通常意味着反复构建/修复
+     */
+    @Column("modelRounds")
+    private Integer modelRounds;
+
+    /**
+     * 用量是否为「中断时的部分值」：true 表示没有拿到最后一轮 usage，数字偏小
+     */
+    @Column("usagePartial")
+    private Boolean usagePartial;
+
+    /**
      * 更新时间
      */
     @Column("updateTime")

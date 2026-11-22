@@ -34,3 +34,7 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### WorkBuddy ###
+# 本地工作区缓存 / 会话记忆，属于个人环境产物，不入库
+.workbuddy/

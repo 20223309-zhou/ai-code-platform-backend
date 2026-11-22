@@ -207,6 +207,7 @@ CREATE DATABASE ai_code_platform DEFAULT CHARACTER SET utf8mb4;
 sql/2026-10-10_add_user_email.sql
 sql/2026-10-29_add_announcement.sql
 sql/2026-10-29_add_point_system.sql
+sql/2026-11-22_add_token_usage.sql
 ```
 
 ### 2. 启动后端

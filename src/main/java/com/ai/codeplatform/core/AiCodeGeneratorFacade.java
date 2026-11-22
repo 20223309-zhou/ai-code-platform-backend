@@ -4,6 +4,7 @@ import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.ai.codeplatform.ai.AiCodeGeneratorService;
+import com.ai.codeplatform.ai.AiUsageContext;
 import com.ai.codeplatform.ai.AiCodeGeneratorServiceFactory;
 import com.ai.codeplatform.ai.model.HtmlCodeResult;
 import com.ai.codeplatform.ai.model.MultiFileCodeResult;
@@ -24,6 +25,7 @@ import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.response.*;
+import dev.langchain4j.model.output.TokenUsage;
 import dev.langchain4j.service.TokenStream;
 import dev.langchain4j.service.tool.ToolExecution;
 import jakarta.annotation.Resource;
@@ -35,6 +37,8 @@ import reactor.core.publisher.FluxSink;
 import java.io.File;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 /**
@@ -83,28 +87,28 @@ public class AiCodeGeneratorFacade {
                 String htmlPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/html_" + appId;
                 FileUtil.mkdir(htmlPath);
                 TokenStream codeStream = aiCodeGeneratorService.generateHtmlCodeStream(appId, userText);
-                yield processTokenStream(codeStream, CodeGenTypeEnum.HTML, appId);
+                yield processTokenStream(codeStream, CodeGenTypeEnum.HTML, appId, modelName);
             }
             case MULTI_FILE -> {
                 // 先创建项目目录，确保工具调用时目录已存在
                 String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/multi_file_" + appId;
                 FileUtil.mkdir(projectPath);
                 TokenStream codeStream = aiCodeGeneratorService.generateMultiFileCodeStream(appId, userText);
-                yield processTokenStream(codeStream, CodeGenTypeEnum.MULTI_FILE, appId);
+                yield processTokenStream(codeStream, CodeGenTypeEnum.MULTI_FILE, appId, modelName);
             }
             case VUE_PROJECT -> {
                 // 先创建项目目录，确保工具调用时目录已存在
                 String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/vue_project_" + appId;
                 FileUtil.mkdir(projectPath);
                 TokenStream codeStream = aiCodeGeneratorService.generateVueProjectCodeStream(appId, userText);
-                yield processTokenStream(codeStream, appId);
+                yield processTokenStream(codeStream, appId, modelName);
             }
             case REACT_PROJECT -> {
                 // 与 Vue 工程模式同构：独立目录前缀、独立提示词，其余（工具集、构建、流处理）完全复用
                 String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/react_project_" + appId;
                 FileUtil.mkdir(projectPath);
                 TokenStream codeStream = aiCodeGeneratorService.generateReactProjectCodeStream(appId, userText);
-                yield processTokenStream(codeStream, appId);
+                yield processTokenStream(codeStream, appId, modelName);
             }
             default -> {
                 String errorMessage = "不支持的生成类型：" + codeGenTypeEnum.getValue();
@@ -114,13 +118,30 @@ public class AiCodeGeneratorFacade {
     }
 
     /**
+     * 累加用量。任一为空时取另一个，避免 NPE。
+     */
+    private void accumulateUsage(AtomicReference<TokenUsage> acc, TokenUsage usage) {
+        if (usage == null) {
+            return;
+        }
+        acc.updateAndGet(prev -> prev == null ? usage : prev.add(usage));
+    }
+
+    /**
      * 中断收尾：先发一个中断哨兵，再正常 complete。
      * 为什么不直接 {@code sink.complete()}：对下游来说那和「模型正常写完」完全一样，
      * 只会触发 doOnComplete，落库时无法区分，既不会打中断标记，也不会补对话记忆。
      * 哨兵是让「服务端主动取消」可被识别的唯一信号，handler 收到后置位并丢掉这一帧
      * （不展示、不入库）。
      */
-    private void completeAsInterrupted(FluxSink<String> sink) {
+    private void completeAsInterrupted(FluxSink<String> sink, Long appId,
+                                       AtomicReference<TokenUsage> usageAcc, String modelName,
+                                       AtomicInteger intermediateCalls) {
+        // 中断时模型不会返回「最后一轮」的 usage，但前面各轮已经真实计费，
+        // 把已累计的部分记下来，比在日志里留空更有价值（标记为 partial）
+        if (usageAcc != null && usageAcc.get() != null) {
+            AiUsageContext.setPartial(appId, modelName, usageAcc.get(), intermediateCalls.get() + 1);
+        }
         sink.next(JSONUtil.toJsonStr(Map.of("type", StreamMessageTypeEnum.INTERRUPTED.getValue())));
         sink.complete();
     }
@@ -130,9 +151,12 @@ public class AiCodeGeneratorFacade {
      * @param tokenStream TokenStream 对象
      * @return Flux<String> 流式响应
      */
-    private Flux<String> processTokenStream(TokenStream tokenStream, Long appId) {
+    private Flux<String> processTokenStream(TokenStream tokenStream, Long appId, String modelName) {
         // 标记本轮生成中 AI 是否已自行调用构建工具（buildVueProject）
         AtomicBoolean buildToolInvoked = new AtomicBoolean(false);
+        // 工具循环里每轮都是一次独立计费调用，只取最后一轮会严重低估，这里逐轮累加
+        AtomicReference<TokenUsage> usageAcc = new AtomicReference<>();
+        AtomicInteger intermediateCalls = new AtomicInteger(0);
         return Flux.create(sink -> {
             tokenStream
                     .onPartialResponseWithContext((PartialResponse partialResponse, PartialResponseContext context) -> {
@@ -141,7 +165,7 @@ public class AiCodeGeneratorFacade {
                             context.streamingHandle().cancel();
                             log.info("生成阶段，用户取消生成，取消任务：{}", appId);
                             cancelGenerationManager.remove(appId);
-                            completeAsInterrupted(sink);
+                            completeAsInterrupted(sink, appId, usageAcc, modelName, intermediateCalls);
                             return;
                         }
                         // 封装AI响应消息并发送到流中
@@ -153,7 +177,7 @@ public class AiCodeGeneratorFacade {
                             context.streamingHandle().cancel();
                             log.info("思考阶段，用户取消生成，取消任务：{}", appId);
                             cancelGenerationManager.remove(appId);
-                            completeAsInterrupted(sink);
+                            completeAsInterrupted(sink, appId, usageAcc, modelName, intermediateCalls);
                             return;
                         }
                         Map<String, String> thinkingMsg = Map.of(
@@ -166,7 +190,7 @@ public class AiCodeGeneratorFacade {
                         if (cancelGenerationManager.isCancelled(appId)) {
                             context.streamingHandle().cancel();
                             cancelGenerationManager.remove(appId);
-                            completeAsInterrupted(sink);
+                            completeAsInterrupted(sink, appId, usageAcc, modelName, intermediateCalls);
                             return;
                         }
                         // 标记 AI 是否自行发起了构建
@@ -184,13 +208,26 @@ public class AiCodeGeneratorFacade {
                     // 处理工具执行完成后的结果
                     .onToolExecuted((ToolExecution toolExecution) -> {
                         if (cancelGenerationManager.isCancelled(appId)) {
-                            completeAsInterrupted(sink);
+                            completeAsInterrupted(sink, appId, usageAcc, modelName, intermediateCalls);
                             return;
                         }
                         ToolExecutedMessage toolExecutedMessage = new ToolExecutedMessage(toolExecution);
                         sink.next(JSONUtil.toJsonStr(toolExecutedMessage));
                     })
+                    // 每一轮带 tool_calls 的响应都会回调这里，usage 必须累计，不能只记最后一轮
+                    .onIntermediateResponse(response -> {
+                        intermediateCalls.incrementAndGet();
+                        accumulateUsage(usageAcc, response.tokenUsage());
+                    })
                     .onCompleteResponse((ChatResponse response) -> {
+                        // 最终一轮 + 前面各轮 = 本轮对话真实用量；日志切面在同一个调用栈里 poll 它
+                        accumulateUsage(usageAcc, response.tokenUsage());
+                        AiUsageContext.set(appId, modelName, usageAcc.get(), intermediateCalls.get() + 1);
+                        if (intermediateCalls.get() > 0) {
+                            log.info("多轮工具调用完成，appId: {}, 中间轮次: {}, 总token: {}",
+                                    appId, intermediateCalls.get(),
+                                    usageAcc.get() == null ? null : usageAcc.get().totalTokenCount());
+                        }
                         if (cancelGenerationManager.isCancelled(appId)) {
                             cancelGenerationManager.remove(appId);
                             sink.complete();
@@ -224,9 +261,12 @@ public class AiCodeGeneratorFacade {
      * @param appId       应用 ID
      * @return 流式响应
      */
-    private Flux<String> processTokenStream(TokenStream tokenStream, CodeGenTypeEnum codeGenType, Long appId) {
+    private Flux<String> processTokenStream(TokenStream tokenStream, CodeGenTypeEnum codeGenType, Long appId, String modelName) {
         StringBuilder codeBuilder = new StringBuilder();
         AtomicBoolean writeToolInvoked = new AtomicBoolean(false);
+        // 工具循环里每轮都是一次独立计费调用，只取最后一轮会严重低估，这里逐轮累加
+        AtomicReference<TokenUsage> usageAcc = new AtomicReference<>();
+        AtomicInteger intermediateCalls = new AtomicInteger(0);
         return Flux.create(sink -> {
             tokenStream
                     // 处理AI响应的信息
@@ -236,7 +276,7 @@ public class AiCodeGeneratorFacade {
                             context.streamingHandle().cancel();
                             log.info("生成阶段，用户取消生成，取消任务：{}", appId);
                             cancelGenerationManager.remove(appId);
-                            completeAsInterrupted(sink);
+                            completeAsInterrupted(sink, appId, usageAcc, modelName, intermediateCalls);
                             return;
                         }
                         codeBuilder.append(partialResponse.text());
@@ -252,7 +292,7 @@ public class AiCodeGeneratorFacade {
                             context.streamingHandle().cancel();
                             log.info("思考阶段，用户取消生成，取消任务：{}", appId);
                             cancelGenerationManager.remove(appId);
-                            completeAsInterrupted(sink);
+                            completeAsInterrupted(sink, appId, usageAcc, modelName, intermediateCalls);
                             return;
                         }
                         // 将AI思考过程封装为map后，转为json字符串给下游处理
@@ -267,7 +307,7 @@ public class AiCodeGeneratorFacade {
                         if (cancelGenerationManager.isCancelled(appId)) {
                             context.streamingHandle().cancel();
                             cancelGenerationManager.remove(appId);
-                            completeAsInterrupted(sink);
+                            completeAsInterrupted(sink, appId, usageAcc, modelName, intermediateCalls);
                             return;
                         }
                         // 只有写文件的工具才标记跳过保存，只读工具（WebFetch/FileRead）不阻塞
@@ -286,13 +326,26 @@ public class AiCodeGeneratorFacade {
                     // 处理工具执行完成后的结果
                     .onToolExecuted((ToolExecution toolExecution) -> {
                         if (cancelGenerationManager.isCancelled(appId)) {
-                            completeAsInterrupted(sink);
+                            completeAsInterrupted(sink, appId, usageAcc, modelName, intermediateCalls);
                             return;
                         }
                         ToolExecutedMessage toolExecutedMessage = new ToolExecutedMessage(toolExecution);
                         sink.next(JSONUtil.toJsonStr(toolExecutedMessage));
                     })
+                    // 每一轮带 tool_calls 的响应都会回调这里，usage 必须累计，不能只记最后一轮
+                    .onIntermediateResponse(response -> {
+                        intermediateCalls.incrementAndGet();
+                        accumulateUsage(usageAcc, response.tokenUsage());
+                    })
                     .onCompleteResponse((ChatResponse response) -> {
+                        // 最终一轮 + 前面各轮 = 本轮对话真实用量；日志切面在同一个调用栈里 poll 它
+                        accumulateUsage(usageAcc, response.tokenUsage());
+                        AiUsageContext.set(appId, modelName, usageAcc.get(), intermediateCalls.get() + 1);
+                        if (intermediateCalls.get() > 0) {
+                            log.info("多轮工具调用完成，appId: {}, 中间轮次: {}, 总token: {}",
+                                    appId, intermediateCalls.get(),
+                                    usageAcc.get() == null ? null : usageAcc.get().totalTokenCount());
+                        }
                         if (cancelGenerationManager.isCancelled(appId)) {
                             cancelGenerationManager.remove(appId);
                             sink.complete();

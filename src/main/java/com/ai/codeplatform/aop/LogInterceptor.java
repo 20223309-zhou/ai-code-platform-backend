@@ -2,6 +2,7 @@ package com.ai.codeplatform.aop;
 
 import cn.hutool.core.util.ReflectUtil;
 import cn.hutool.json.JSONUtil;
+import com.ai.codeplatform.ai.AiUsageContext;
 import com.ai.codeplatform.annotation.LogRecord;
 import com.ai.codeplatform.common.BaseResponse;
 import com.ai.codeplatform.constant.UserConstant;
@@ -118,10 +119,14 @@ public class LogInterceptor {
                 // 在流完成时记录日志
                 return flux
                         .doOnComplete(() -> {
+                            // token 用量由 facade 在同一调用栈里放好，这里取出来附到这次请求的日志上
+                            applyUsage(logInfo);
                             recordLog(logInfo,startTime);
                             saveLog(logInfo);
                         })
                         .doOnError(error -> {
+                            // 失败时也清一次，避免 ThreadLocal 残留到线程池的下一个任务
+                            AiUsageContext.poll();
                             long duration = System.currentTimeMillis() - startTime;
                             logInfo.setEndTime(LocalDateTime.now());
                             logInfo.setDurationMs((int) duration);
@@ -190,6 +195,30 @@ public class LogInterceptor {
                 log.error("异步日志写入异常", e);
             }
         });
+    }
+
+    /**
+     * 把本轮 AI 用量附加到日志记录上。
+     * 非 AI 生成接口取不到值，直接跳过；中断/失败时同样没有值（模型没返回最终 usage）。
+     */
+    private void applyUsage(SysOperationLog logInfo) {
+        AiUsageContext.Usage usage = AiUsageContext.poll();
+        if (usage == null) {
+            return;
+        }
+        // 客户端强制断开时订阅被取消，doOnComplete 不会执行，ThreadLocal 可能残留；
+        // appId 对不上就直接丢掉，绝不能把上次的量记到这次请求上
+        if (usage.appId() != null && !usage.appId().equals(logInfo.getAppId())) {
+            log.debug("用量与请求 appId 不匹配，已丢弃。usage.appId={}, log.appId={}",
+                    usage.appId(), logInfo.getAppId());
+            return;
+        }
+        logInfo.setModelName(usage.modelName());
+        logInfo.setInputTokens(usage.inputTokens());
+        logInfo.setOutputTokens(usage.outputTokens());
+        logInfo.setTotalTokens(usage.totalTokens());
+        logInfo.setModelRounds(usage.modelRounds());
+        logInfo.setUsagePartial(usage.partial());
     }
 
     /**

@@ -210,6 +210,7 @@ For a fresh database run `sql/create_table.sql` (announcement and points tables 
 sql/2026-10-10_add_user_email.sql
 sql/2026-10-29_add_announcement.sql
 sql/2026-10-29_add_point_system.sql
+sql/2026-11-22_add_token_usage.sql
 ```
 
 ### 2. Start the backend
