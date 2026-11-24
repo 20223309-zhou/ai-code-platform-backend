@@ -7,6 +7,7 @@ import com.ai.codeplatform.ai.AiCodeGeneratorServiceFactory;
 import com.ai.codeplatform.ai.model.message.*;
 import com.ai.codeplatform.ai.tools.BaseTool;
 import com.ai.codeplatform.ai.tools.ToolManager;
+import com.ai.codeplatform.model.entity.ChatHistory;
 import com.ai.codeplatform.model.entity.ChatHistoryOriginal;
 import com.ai.codeplatform.model.entity.User;
 import com.ai.codeplatform.model.enums.ChatHistoryMessageTypeEnum;
@@ -21,6 +22,8 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -34,7 +37,18 @@ public class JsonMessageStreamHandler {
     /**
      * 中断标记：写进历史与记忆，让下一轮模型知道自己上一次没写完。
      */
-    private static final String INTERRUPT_MARKER = "\n\n> ⏹ 本次生成已被用户中断。";
+    /**
+     * 生成过程中的落库间隔（毫秒）。
+     */
+    private static final long CHECKPOINT_INTERVAL_MS = 1500;
+
+    /**
+     * 检查点内容的临时尾巴：让人一眼看出这条回复还没写完。
+     * 正常结束时会被最终内容整行覆盖，中断时会被中断标记替换。
+     */
+    private static final String STREAMING_SUFFIX = "\n\n> ⏳ 生成中…";
+
+    private static final String INTERRUPT_MARKER = "\n\n> ⏹ 本次生成已中断。";
 
     @Resource
     private ToolManager toolManager;
@@ -66,6 +80,9 @@ public class JsonMessageStreamHandler {
         Set<String> seenToolNames = new HashSet<>();
         // 服务端主动取消时 Facade 会先发一个中断哨兵，这里置位后按「中断」落库
         AtomicBoolean interrupted = new AtomicBoolean(false);
+        // 检查点写入的那一行 chat_history 的 id：有它之后所有写入都走 update，保证一轮生成只有一条 AI 消息
+        AtomicReference<Long> displayRowId = new AtomicReference<>();
+        AtomicLong lastCheckpointAt = new AtomicLong(0);
         return originFlux
                 .map(chunk -> {
                     // 解析每个 JSON 消息块
@@ -73,12 +90,15 @@ public class JsonMessageStreamHandler {
                             originalChatHistoryList, seenToolNames, interrupted);
                 })
                 .filter(StrUtil::isNotEmpty) // 过滤空字串
+                // 生成中按间隔把已生成文本落库，中断/刷新后能立刻看到断点内容
+                .doOnNext(chunk -> checkpointIfDue(chatHistoryService, appId, loginUser,
+                        chatHistoryStringBuilder, displayRowId, lastCheckpointAt))
                 .doOnComplete(() -> {
                     // 正常写完是 false；服务端主动取消（收到过哨兵）走这里时是 true
                     boolean wasInterrupted = interrupted.get();
                     String partial = persistCollected(chatHistoryService, chatHistoryOriginalService,
                             appId, loginUser, originalChatHistoryList,
-                            chatHistoryStringBuilder, aiResponseStringBuilder, wasInterrupted);
+                            chatHistoryStringBuilder, aiResponseStringBuilder, wasInterrupted, displayRowId);
                     if (wasInterrupted) {
                         aiCodeGeneratorServiceFactory.appendAssistantTextToMemory(appId, partial);
                     }
@@ -88,7 +108,7 @@ public class JsonMessageStreamHandler {
                     // 不在这里落库，已经生成的内容会随请求一起丢掉：重新进入会话只剩一条用户消息。
                     String partial = persistCollected(chatHistoryService, chatHistoryOriginalService,
                             appId, loginUser, originalChatHistoryList,
-                            chatHistoryStringBuilder, aiResponseStringBuilder, true);
+                            chatHistoryStringBuilder, aiResponseStringBuilder, true, displayRowId);
                     // langchain4j 只在响应完整结束时才把 AiMessage 写进 ChatMemory，
                     // 取消时补一条，否则同一会话里继续对话模型会完全不知道自己写到哪
                     aiCodeGeneratorServiceFactory.appendAssistantTextToMemory(appId, partial);
@@ -96,9 +116,67 @@ public class JsonMessageStreamHandler {
                 .doOnError(error -> {
                     // 如果AI回复失败，也要记录错误消息
                     String errorMessage = "AI回复失败: " + error.getMessage();
-                    chatHistoryService.addChatMessage(appId, errorMessage, ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
-                    chatHistoryOriginalService.addOriginalChatMessage(appId, errorMessage, ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
+                    try {
+                        // 已经写过检查点就更新那一行，避免同一轮生成留下两条 AI 消息
+                        String partial = chatHistoryStringBuilder.toString();
+                        if (displayRowId.get() != null) {
+                            String content = StrUtil.isBlank(partial) ? errorMessage : partial + "\n\n> " + errorMessage;
+                            saveOrUpdateDisplay(chatHistoryService, appId, loginUser, content, displayRowId);
+                        } else {
+                            chatHistoryService.addChatMessage(appId, errorMessage,
+                                    ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
+                        }
+                    } catch (Exception e) {
+                        log.error("记录失败信息时出错，appId: {}", appId, e);
+                    }
+                    chatHistoryOriginalService.addOriginalChatMessage(appId, errorMessage,
+                            ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
                 });
+    }
+
+    /**
+     * 按固定间隔把"已生成的展示文本"写进 chat_history。
+     * 只在内容发生变化且有内容时才写；写失败只记日志，绝不影响生成。
+     */
+    private void checkpointIfDue(ChatHistoryService chatHistoryService, long appId, User loginUser,
+                                 StringBuilder displayText, AtomicReference<Long> displayRowId,
+                                 AtomicLong lastCheckpointAt) {
+        long now = System.currentTimeMillis();
+        if (now - lastCheckpointAt.get() < CHECKPOINT_INTERVAL_MS) {
+            return;
+        }
+        String content = displayText.toString();
+        if (StrUtil.isBlank(content)) {
+            return;
+        }
+        lastCheckpointAt.set(now);
+        try {
+            saveOrUpdateDisplay(chatHistoryService, appId, loginUser, content + STREAMING_SUFFIX, displayRowId);
+        } catch (Exception e) {
+            log.warn("生成中段落库失败（不影响生成），appId: {}, 原因: {}", appId, e.toString());
+        }
+    }
+
+    /**
+     * 写入展示用 AI 消息：没有检查点就插入并把 id 记下来，之后一律更新同一行。
+     */
+    private void saveOrUpdateDisplay(ChatHistoryService chatHistoryService, long appId, User loginUser,
+                                     String content, AtomicReference<Long> displayRowId) {
+        Long rowId = displayRowId.get();
+        if (rowId == null) {
+            ChatHistory row = ChatHistory.builder()
+                    .appId(appId)
+                    .userId(loginUser.getId())
+                    .message(content)
+                    .messageType(ChatHistoryMessageTypeEnum.AI.getValue())
+                    .build();
+            if (chatHistoryService.save(row)) {
+                displayRowId.set(row.getId());
+            }
+        } else {
+            // 只带 id 和 message：updateById 默认忽略 null 字段，不会动 createTime 等
+            chatHistoryService.updateById(ChatHistory.builder().id(rowId).message(content).build());
+        }
     }
 
     /**
@@ -119,7 +197,7 @@ public class JsonMessageStreamHandler {
                                     long appId, User loginUser,
                                     List<ChatHistoryOriginal> toolRecords,
                                     StringBuilder displayText, StringBuilder aiText,
-                                    boolean interrupted) {
+                                    boolean interrupted, AtomicReference<Long> displayRowId) {
         try {
             String aiContent = aiText.toString();
             String displayContent = displayText.toString();
@@ -146,10 +224,9 @@ public class JsonMessageStreamHandler {
                 chatHistoryOriginalService.addOriginalChatMessage(appId, aiContent,
                         ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
             }
-            // 流式响应完成后，添加 AI 消息到对话历史（只有当有内容时才保存）
+            // 展示用消息：如果生成过程中已经写过检查点，就更新同一行，避免重复
             if (StrUtil.isNotBlank(displayContent)) {
-                chatHistoryService.addChatMessage(appId, displayContent,
-                        ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
+                saveOrUpdateDisplay(chatHistoryService, appId, loginUser, displayContent, displayRowId);
             }
             if (interrupted) {
                 log.info("生成被中断，已落库已生成内容，appId: {}, 长度: {}", appId, displayContent.length());

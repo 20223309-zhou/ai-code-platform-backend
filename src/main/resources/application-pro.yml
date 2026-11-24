@@ -63,7 +63,7 @@ langchain4j:
       grok-model-name: ${GROK_MODEL_NAME}
       chatgpt-api-key: ${CHATGPT_API_KEY}
       chatgpt-model-name: ${CHATGPT_MODEL_NAME}
-      max-tokens: 62768
+      max-tokens: 65536
       temperature: 0.7
       log-requests: false
       log-responses: false
